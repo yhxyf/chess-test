@@ -5,6 +5,9 @@
     --line-color: #6b4724;
     --red-piece-text: #c0392b;
     --black-piece-text: #2c3e50;
+    --red-piece-bg: #ffdddd;
+    --black-piece-bg: #f0f0f0;
+    --piece-border: #888888;
     --selected-glow: rgba(9, 132, 227, 0.8);
     --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --bg-color: #f0f2f5;
@@ -140,7 +143,7 @@ h1 {
     flex-direction: column;
     gap: 20px;
 }
-.players-info, .spectators-info, .chat-container, .game-actions {
+.players-info, .spectators-info, .chat-container, .game-actions, .game-log {
     background: var(--container-bg);
     padding: 20px;
     border-radius: 12px;
@@ -267,16 +270,15 @@ h1 {
     text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
     transition: all 0.15s ease-in-out;
     box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.4);
+    border: 2px solid var(--piece-border);
 }
 .chess-piece.red {
-    background: radial-gradient(circle at 30% 30%, #ffdddd, #ffcccc);
+    background: var(--red-piece-bg);
     color: var(--red-piece-text);
-    border: 2px solid var(--red-piece-text);
 }
 .chess-piece.black {
-    background: radial-gradient(circle at 30% 30%, #f0f0f0, #e0e0e0);
+    background: var(--black-piece-bg);
     color: var(--black-piece-text);
-    border: 2px solid var(--black-piece-text);
 }
 .chess-piece.selected {
     box-shadow: 0 0 0 4px var(--selected-glow), inset 0 -3px 5px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.4);
@@ -285,7 +287,7 @@ h1 {
 /* 聊天窗口 */
 .chat-container h3 { margin-bottom: 10px; }
 .chat-messages {
-    height: 200px;
+    height: 150px;
     overflow-y: auto;
     border: 1px solid #ddd;
     padding: 10px;
@@ -350,10 +352,40 @@ h1 {
     font-weight: bold;
 }
 
+/* 新增：对局记录样式 */
+.game-log h3 { margin-bottom: 10px; }
+.move-history {
+    height: 120px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+.move-history-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+.move-history-item:nth-child(odd) {
+    background-color: #f0f0f0;
+}
+.move-number {
+    color: #888;
+    margin-right: 10px;
+}
+
+
 /* 新增: 游戏操作区 */
 .game-actions {
     padding: 15px;
     text-align: center;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
 }
 
 /* 角色切换模态框 */
