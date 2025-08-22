@@ -20,6 +20,9 @@ const sendMessageBtn = document.getElementById('sendMessageBtn');
 // 获取用户名（在实际应用中，这应该从登录系统获取）
 const username = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
 
+// 添加切换角色按钮
+let switchRoleBtn = null;
+
 // 加入房间
 socket.emit('joinRoom', { roomId, username });
 
@@ -36,6 +39,20 @@ socket.on('roomInfo', ({ room, role }) => {
     updateSpectatorsList(room.spectators);
 });
 
+// 监听聊天历史消息
+socket.on('chatHistory', (messages) => {
+    // 清空现有消息
+    chatMessages.innerHTML = '';
+    
+    // 按时间顺序显示历史消息（数据库中是按时间倒序的，所以要反转）
+    messages.reverse().forEach(message => {
+        addMessage(`${message.username}: ${message.message}`, 'user');
+    });
+    
+    // 滚动到底部
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+});
+
 // 监听用户加入
 socket.on('userJoined', ({ username, role }) => {
     addMessage(`${username} 加入了房间`, 'system');
@@ -44,6 +61,16 @@ socket.on('userJoined', ({ username, role }) => {
 // 监听用户离开
 socket.on('userLeft', ({ socketId }) => {
     addMessage(`有用户离开了房间`, 'system');
+});
+
+// 监听玩家列表更新
+socket.on('playersListUpdate', (players) => {
+    updatePlayersList(players);
+});
+
+// 监听观战者列表更新
+socket.on('spectatorsListUpdate', (spectators) => {
+    updateSpectatorsList(spectators);
 });
 
 // 监听游戏状态更新
@@ -61,6 +88,50 @@ socket.on('moveRejected', ({ reason }) => {
     alert(`移动被拒绝: ${reason}`);
 });
 
+// 监听角色切换被拒绝
+socket.on('roleSwitchRejected', ({ reason }) => {
+    alert(`角色切换被拒绝: ${reason}`);
+});
+
+// 监听角色已切换
+socket.on('roleSwitched', ({ role, color }) => {
+    alert(`角色已切换为: ${role === 'player' ? '玩家' : '观战者'}`);
+    // 更新房间信息显示
+    const roomInfoElement = document.getElementById('roomInfo');
+    if (roomInfoElement) {
+        // 重新获取房间信息并更新显示
+        socket.emit('getRoomInfo', { roomId });
+    }
+});
+
+// 监听房间状态更新
+socket.on('roomStatusUpdate', ({ status }) => {
+    // 更新房间状态显示
+    const roomInfoElement = document.getElementById('roomInfo');
+    if (roomInfoElement) {
+        const statusElement = roomInfoElement.querySelector('p:nth-child(2)'); // 第二个p元素是状态
+        if (statusElement) {
+            const statusText = status === 'waiting' ? '等待中' : status === 'playing' ? '游戏中' : '已结束';
+            statusElement.textContent = `状态: ${statusText}`;
+        }
+    }
+});
+
+// 监听游戏结束
+socket.on('gameOver', ({ winner }) => {
+    const winnerName = winner === 'red' ? '红方' : '黑方';
+    alert(`游戏结束！${winnerName}获胜！`);
+    
+    // 更新房间状态显示
+    const roomInfoElement = document.getElementById('roomInfo');
+    if (roomInfoElement) {
+        const statusElement = roomInfoElement.querySelector('p');
+        if (statusElement) {
+            statusElement.textContent = '状态: 已结束';
+        }
+    }
+});
+
 // 发送消息
 function sendMessage() {
     const message = messageInput.value.trim();
@@ -74,7 +145,20 @@ function sendMessage() {
 function addMessage(message, type) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('chat-message', type);
-    messageElement.textContent = message;
+    
+    // 添加时间戳
+    const timestamp = new Date().toLocaleTimeString();
+    const timestampElement = document.createElement('span');
+    timestampElement.classList.add('timestamp');
+    timestampElement.textContent = `[${timestamp}] `;
+    
+    // 添加消息内容
+    const contentElement = document.createElement('span');
+    contentElement.textContent = message;
+    
+    messageElement.appendChild(timestampElement);
+    messageElement.appendChild(contentElement);
+    
     chatMessages.appendChild(messageElement);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -86,6 +170,33 @@ function updateRoomInfo(room, role) {
         <p>状态: ${room.status === 'waiting' ? '等待中' : room.status === 'playing' ? '游戏中' : '已结束'}</p>
         <p>您的角色: ${role === 'player' ? '玩家' : '观战者'}</p>
     `;
+    
+    // 如果房间状态是等待中，添加切换角色按钮
+    if (room.status === 'waiting') {
+        // 创建切换角色按钮
+        if (!switchRoleBtn) {
+            switchRoleBtn = document.createElement('button');
+            switchRoleBtn.id = 'switchRoleBtn';
+            switchRoleBtn.className = 'btn btn-primary';
+            switchRoleBtn.textContent = role === 'player' ? '切换为观战者' : '切换为玩家';
+            switchRoleBtn.addEventListener('click', switchRole);
+            roomInfo.appendChild(switchRoleBtn);
+        } else {
+            // 更新按钮文本
+            switchRoleBtn.textContent = role === 'player' ? '切换为观战者' : '切换为玩家';
+        }
+    } else {
+        // 如果房间状态不是等待中，移除切换角色按钮
+        if (switchRoleBtn) {
+            switchRoleBtn.remove();
+            switchRoleBtn = null;
+        }
+    }
+}
+
+// 切换角色
+function switchRole() {
+    socket.emit('switchRole', { roomId, username });
 }
 
 // 初始化棋盘
@@ -144,9 +255,9 @@ function getPieceSymbol(piece) {
         'general': piece.color === 'red' ? '帅' : '将',
         'advisor': piece.color === 'red' ? '仕' : '士',
         'elephant': piece.color === 'red' ? '相' : '象',
-        'horse': piece.color === 'red' ? '马' : '馬',
-        'chariot': piece.color === 'red' ? '车' : '車',
-        'cannon': piece.color === 'red' ? '炮' : '砲',
+        'horse': piece.color === 'red' ? '马' : '马',
+        'chariot': piece.color === 'red' ? '车' : '车',
+        'cannon': piece.color === 'red' ? '炮' : '炮',
         'soldier': piece.color === 'red' ? '兵' : '卒'
     };
     return symbols[piece.type] || '';

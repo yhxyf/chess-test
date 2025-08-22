@@ -191,6 +191,7 @@ header h1 {
     margin-bottom: 8px;
     padding: 5px;
     border-radius: 3px;
+    font-size: 14px;
 }
 
 .chat-message.system {
@@ -200,6 +201,12 @@ header h1 {
 
 .chat-message.user {
     background-color: #e1f0fa;
+}
+
+.timestamp {
+    color: #95a5a6;
+    font-size: 12px;
+    margin-right: 5px;
 }
 
 .chat-input {
