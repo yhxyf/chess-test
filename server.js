@@ -86,6 +86,17 @@ function initializeBoard() {
   return board;
 }
 
+// 初始化游戏状态
+function initializeGameState() {
+    return {
+        board: initializeBoard(),
+        currentPlayer: 'red',
+        capturedPieces: { red: [], black: [] },
+        history: [], // 用于悔棋
+        isCheck: false
+    };
+}
+
 
 io.on('connection', (socket) => {
   console.log('用户连接:', socket.id);
@@ -108,7 +119,7 @@ io.on('connection', (socket) => {
             DatabaseManager.createRoom(roomId, `房间 ${roomId}`);
             room = {
                 id: roomId, name: `房间 ${roomId}`, players: [], spectators: [], status: 'waiting',
-                gameState: { board: initializeBoard(), currentPlayer: 'red' }
+                gameState: initializeGameState()
             };
             DatabaseManager.saveGameState(roomId, room.gameState.board, 'red');
         } else {
@@ -120,7 +131,7 @@ io.on('connection', (socket) => {
                 players: dbPlayers, 
                 spectators: dbSpectators.map(s => ({id: s.socket_id, username: s.username})),
                 status: roomRecord.status,
-                gameState: dbGameState || { board: initializeBoard(), currentPlayer: 'red' }
+                gameState: dbGameState ? { ...initializeGameState(), ...dbGameState } : initializeGameState()
             };
         }
         rooms[roomId] = room;
@@ -172,14 +183,14 @@ io.on('connection', (socket) => {
 
     // 5. 关键修复：如果房间是'finished'状态，但现在有两个玩家在线，则重置游戏
     const onlinePlayersCount = room.players.filter(p => p.id).length;
-    if (onlinePlayersCount === 2 && room.status === 'finished') {
-        console.log(`房间 ${roomId} 已满员，重置游戏状态。`);
+    if (onlinePlayersCount === 2 && room.status !== 'playing') {
+        console.log(`房间 ${roomId} 已满员，开始或重置游戏。`);
         room.status = 'playing';
-        room.gameState = { board: initializeBoard(), currentPlayer: 'red' };
+        room.gameState = initializeGameState();
         DatabaseManager.updateRoomStatus(roomId, 'playing');
         DatabaseManager.saveGameState(roomId, room.gameState.board, 'red');
         io.to(roomId).emit('gameStateUpdate', room.gameState);
-        io.to(roomId).emit('roomStatusUpdate', { status: 'playing' }); // 通知客户端状态变化
+        io.to(roomId).emit('roomStatusUpdate', { status: 'playing' }); 
     }
     
     // 6. 更新客户端信息
@@ -214,6 +225,15 @@ io.on('connection', (socket) => {
     if (!isValidMove(from.row, from.col, to.row, to.col, player.color, room.gameState.board)) {
       return socket.emit('moveRejected', { reason: '非法移动' });
     }
+
+    // **悔棋功能：保存移动前的状态**
+    room.gameState.history.push(JSON.parse(JSON.stringify(room.gameState)));
+    
+    // **吃子记录**
+    const capturedPiece = room.gameState.board[to.row][to.col];
+    if (capturedPiece) {
+        room.gameState.capturedPieces[capturedPiece.color].push(capturedPiece.type);
+    }
     
     const piece = room.gameState.board[from.row][from.col];
     room.gameState.board[to.row][to.col] = piece;
@@ -241,6 +261,48 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 悔棋请求
+  socket.on('requestUndo', ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room || room.status !== 'playing') return;
+      
+      const player = room.players.find(p => p.id === socket.id);
+      if (!player) return;
+
+      // 只有在不是自己回合时才能请求悔棋
+      if (player.color === room.gameState.currentPlayer) {
+          return socket.emit('systemMessage', { message: '请在对方回合时请求悔棋。' });
+      }
+
+      const opponent = room.players.find(p => p.id && p.id !== socket.id);
+      if (opponent) {
+          io.to(opponent.id).emit('undoRequest', { from: player.username });
+      } else {
+          socket.emit('systemMessage', { message: '对手已离线，无法悔棋。' });
+      }
+  });
+
+  // 悔棋响应
+  socket.on('undoResponse', ({ roomId, accepted }) => {
+      const room = rooms[roomId];
+      if (!room || !room.gameState.history || room.gameState.history.length === 0) return;
+
+      const player = room.players.find(p => p.id === socket.id);
+      const requester = room.players.find(p => p.id !== socket.id);
+
+      if (accepted) {
+          room.gameState = room.gameState.history.pop();
+          DatabaseManager.saveGameState(roomId, room.gameState.board, room.gameState.currentPlayer);
+          io.to(roomId).emit('gameStateUpdate', room.gameState);
+          io.to(roomId).emit('systemMessage', { message: `${player.username} 同意了悔棋请求。` });
+      } else {
+          if (requester && requester.id) {
+              io.to(requester.id).emit('systemMessage', { message: `对方拒绝了你的悔棋请求。` });
+          }
+      }
+  });
+
+
   // 聊天消息
   socket.on('sendMessage', ({ roomId, message, username }) => {
     DatabaseManager.saveChatMessage(roomId, username, message);
@@ -260,7 +322,6 @@ io.on('connection', (socket) => {
             userLeft.id = null; // 标记为离线
             console.log(`玩家 ${userLeft.username} 在房间 ${roomId} 中断开连接`);
             
-            // 只有一个玩家在线时，游戏结束
             const onlinePlayers = room.players.filter(p => p.id);
             if(onlinePlayers.length < 2 && room.status === 'playing') {
                 room.status = 'finished';

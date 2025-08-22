@@ -140,7 +140,7 @@ h1 {
     flex-direction: column;
     gap: 20px;
 }
-.players-info, .spectators-info, .chat-container {
+.players-info, .spectators-info, .chat-container, .game-actions {
     background: var(--container-bg);
     padding: 20px;
     border-radius: 12px;
@@ -285,7 +285,7 @@ h1 {
 /* 聊天窗口 */
 .chat-container h3 { margin-bottom: 10px; }
 .chat-messages {
-    height: 250px;
+    height: 200px;
     overflow-y: auto;
     border: 1px solid #ddd;
     padding: 10px;
@@ -293,8 +293,9 @@ h1 {
     background-color: #f9f9f9;
     border-radius: 5px;
 }
-.chat-message { margin-bottom: 8px; }
-.chat-message.system { color: #95a5a6; font-style: italic; font-size: 0.9em; }
+.chat-message { margin-bottom: 8px; font-size: 14px; }
+.chat-message.system { color: #95a5a6; font-style: italic; }
+.chat-message .timestamp { color: #aaa; margin-right: 5px; }
 .chat-input { display: flex; gap: 10px; }
 .chat-input input {
     flex: 1;
@@ -319,6 +320,40 @@ h1 {
 .side-panel.black-turn .players-info li:nth-child(1) {
     background-color: rgba(9, 132, 227, 0.15);
     font-weight: bold;
+}
+
+/* 新增：被吃棋子样式 */
+.captured-pieces {
+    margin-top: 15px;
+}
+.captured-pieces h4 {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+.captured-pieces .pieces-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 30px;
+}
+.captured-piece {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* 新增: 游戏操作区 */
+.game-actions {
+    padding: 15px;
+    text-align: center;
 }
 
 /* 角色切换模态框 */

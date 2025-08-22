@@ -26,6 +26,14 @@
                         <h3>玩家</h3>
                         <ul id="playersList">
                             </ul>
+                        <div class="captured-pieces" id="capturedForBlack">
+                            <h4>黑方被吃</h4>
+                            <div class="pieces-container"></div>
+                        </div>
+                        <div class="captured-pieces" id="capturedForRed">
+                            <h4>红方被吃</h4>
+                            <div class="pieces-container"></div>
+                        </div>
                     </div>
                     
                     <div class="spectators-info">
@@ -42,6 +50,10 @@
                             <input type="text" id="messageInput" placeholder="输入消息..." />
                             <button id="sendMessageBtn" class="btn">发送</button>
                         </div>
+                    </div>
+
+                    <div class="game-actions">
+                        <button id="undoBtn" class="btn">请求悔棋</button>
                     </div>
                 </div>
             </div>

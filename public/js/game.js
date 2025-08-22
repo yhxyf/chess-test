@@ -16,6 +16,7 @@ const spectatorCountEl = document.getElementById('spectatorCount');
 const chatMessagesEl = document.getElementById('chatMessages');
 const messageInputEl = document.getElementById('messageInput');
 const sendMessageBtnEl = document.getElementById('sendMessageBtn');
+const undoBtn = document.getElementById('undoBtn');
 
 // 模态框元素
 const roleSwitchModal = document.getElementById('roleSwitchModal');
@@ -66,29 +67,20 @@ socket.on('userLeft', ({ username }) => {
     addMessageToBox(username, '离开了房间', 'system');
 });
 
-socket.on('userRoleChanged', ({ username, newRole }) => {
-    if (username === myUsername) {
-        myRole = newRole;
-        // 更新自身颜色
-        const meAsPlayer = currentRoomState.players.find(p => p.username === myUsername);
-        myColor = (newRole === 'player' && meAsPlayer) ? meAsPlayer.color : '';
-    }
-    addMessageToBox(username, `切换角色为 ${newRole === 'player' ? '玩家' : '观战者'}`, 'system');
-});
-
-
 socket.on('playersListUpdate', (players) => {
-    currentRoomState.players = players; // 更新本地房间状态
+    currentRoomState.players = players;
     updatePlayersList(players);
 });
+
 socket.on('spectatorsListUpdate', (spectators) => {
-    currentRoomState.spectators = spectators; // 更新本地房间状态
+    currentRoomState.spectators = spectators;
     updateSpectatorsList(spectators);
 });
 
 socket.on('gameStateUpdate', (gameState) => {
     currentRoomState.gameState = gameState;
     renderBoard(gameState.board, gameState.currentPlayer);
+    updateCapturedPieces(gameState.capturedPieces); // 更新吃子显示
 });
 
 socket.on('newMessage', ({ username, message }) => {
@@ -101,22 +93,24 @@ socket.on('moveRejected', ({ reason }) => {
     clearHighlights();
 });
 
-socket.on('roleSwitchError', ({ reason }) => alert(`角色切换失败: ${reason}`));
-
-socket.on('roleSwitchRequest', ({ fromUser, targetRole }) => {
-    const accepted = confirm(`${fromUser.username} 想成为 ${targetRole === 'red' ? '红方' : '黑方'}，您是否同意与他交换角色（您将成为观战者）？`);
-    socket.emit('roleSwitchResponse', { accepted, fromUser, targetRole });
-});
-
-
 socket.on('gameOver', ({ winner, reason }) => {
-    const winnerName = winner === 'red' ? '红方' : '黑方';
-    let message = `游戏结束！${winnerName} 获胜！`;
+    let message = `游戏结束！${winner || '无人'} 获胜！`;
     if (reason) {
         message += ` (${reason})`;
     }
-    setTimeout(() => alert(message), 100); // 延迟确保棋盘渲染
+    setTimeout(() => alert(message), 100);
 });
+
+// 新增：悔棋相关事件
+socket.on('undoRequest', ({ from }) => {
+    const accepted = confirm(`${from} 请求悔棋，你是否同意？`);
+    socket.emit('undoResponse', { roomId, accepted });
+});
+
+socket.on('systemMessage', ({ message }) => {
+    addMessageToBox('系统', message, 'system');
+});
+
 
 // --- DOM 操作函数 ---
 
@@ -124,26 +118,20 @@ function updateRoomInfo(room, role) {
     roomInfoEl.innerHTML = `
         <h2>${room.name}</h2>
         <p>状态: <span id="roomStatusText" class="status-text">${room.status}</span></p>
-        <p>您的身份: ${role === 'player' ? '玩家' : '观战者'} (${myUsername})</p>
+        <p>您的身份: ${role === 'player' ? `玩家 (${myColor === 'red' ? '红方' : '黑方'})` : '观战者'} (${myUsername})</p>
     `;
-    const switchBtn = document.createElement('button');
-    switchBtn.id = 'openRoleSwitchModalBtn';
-    switchBtn.className = 'btn';
-    switchBtn.textContent = '切换角色';
-    roomInfoEl.appendChild(switchBtn);
-
-    switchBtn.addEventListener('click', openRoleSwitchModal);
 }
+
 socket.on('roomStatusUpdate', ({ status }) => {
     const statusEl = document.getElementById('roomStatusText');
     if(statusEl) statusEl.textContent = status;
 });
 
 function renderBoard(board, currentPlayer) {
-    chessBoardEl.innerHTML = ''; // 清空棋盘
-    const isMyTurn = myColor === currentPlayer;
-
-    // 创建 10x9 的网格单元
+    chessBoardEl.innerHTML = '';
+    const isMyTurn = myColor === currentPlayer && myRole === 'player';
+    
+    // **已回退**：移除镜像逻辑，始终以红方在下的视角渲染
     for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 9; c++) {
             const cell = document.createElement('div');
@@ -151,7 +139,6 @@ function renderBoard(board, currentPlayer) {
             cell.dataset.row = r;
             cell.dataset.col = c;
             
-            // 在单元格上放置棋子
             const pieceData = board[r][c];
             if (pieceData) {
                 const pieceEl = document.createElement('div');
@@ -168,17 +155,14 @@ function renderBoard(board, currentPlayer) {
         }
     }
     
-    // 添加九宫格和楚河汉界文字
     addBoardFeatures();
     
-    // 更新回合提示
     const sidePanel = document.querySelector('.side-panel');
     sidePanel.classList.toggle('red-turn', currentPlayer === 'red');
     sidePanel.classList.toggle('black-turn', currentPlayer === 'black');
 }
 
 function addBoardFeatures() {
-    // 九宫
     const palaceTop = document.createElement('div');
     palaceTop.className = 'palace palace-top';
     chessBoardEl.appendChild(palaceTop);
@@ -187,7 +171,7 @@ function addBoardFeatures() {
     palaceBottom.className = 'palace palace-bottom';
     chessBoardEl.appendChild(palaceBottom);
     
-    // 楚河汉界文字
+    // **已回退**：恢复静态文本
     const chuHe = document.createElement('div');
     chuHe.className = 'river-text chu-he';
     chuHe.textContent = '楚 河';
@@ -198,6 +182,7 @@ function addBoardFeatures() {
     hanJie.textContent = '漢 界';
     chessBoardEl.appendChild(hanJie);
 }
+
 
 function getPieceSymbol(piece) {
     if (!piece) return '';
@@ -212,7 +197,6 @@ function getPieceSymbol(piece) {
     };
     return symbols[piece.type];
 }
-
 
 function updatePlayersList(players) {
     playersListEl.innerHTML = '';
@@ -230,7 +214,6 @@ function updatePlayersList(players) {
     playersListEl.appendChild(redLi);
 }
 
-
 function updateSpectatorsList(spectators) {
     spectatorsListEl.innerHTML = '';
     spectatorCountEl.textContent = spectators.length;
@@ -239,6 +222,31 @@ function updateSpectatorsList(spectators) {
         li.textContent = s.username;
         if(s.username === myUsername) li.style.fontWeight = 'bold';
         spectatorsListEl.appendChild(li);
+    });
+}
+
+// **新增：渲染被吃棋子的函数**
+function updateCapturedPieces(captured) {
+    if (!captured) return;
+
+    const redContainer = document.querySelector('#capturedForRed .pieces-container');
+    const blackContainer = document.querySelector('#capturedForBlack .pieces-container');
+    
+    redContainer.innerHTML = '';
+    blackContainer.innerHTML = '';
+
+    (captured.red || []).forEach(pieceType => {
+        const pieceEl = document.createElement('div');
+        pieceEl.className = 'captured-piece red';
+        pieceEl.textContent = getPieceSymbol({ type: pieceType, color: 'red' });
+        redContainer.appendChild(pieceEl);
+    });
+
+    (captured.black || []).forEach(pieceType => {
+        const pieceEl = document.createElement('div');
+        pieceEl.className = 'captured-piece black';
+        pieceEl.textContent = getPieceSymbol({ type: pieceType, color: 'black' });
+        blackContainer.appendChild(pieceEl);
     });
 }
 
@@ -265,23 +273,15 @@ function clearHighlights() {
     });
 }
 
-// --- 角色切换模态框逻辑 ---
-function openRoleSwitchModal() {
-    const onlinePlayers = currentRoomState.players.filter(p => p.id);
-    const isRedOccupied = onlinePlayers.some(p => p.color === 'red');
-    const isBlackOccupied = onlinePlayers.some(p => p.color === 'black');
-    
-    switchToRedBtn.disabled = myColor === 'red' || isRedOccupied;
-    switchToBlackBtn.disabled = myColor === 'black' || isBlackOccupied;
-    switchToSpectatorBtn.disabled = myRole === 'spectator';
-    
-    roleSwitchModal.classList.add('visible');
-}
-
 // --- 事件绑定 ---
 sendMessageBtnEl.addEventListener('click', sendMessage);
 messageInputEl.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
+});
+
+undoBtn.addEventListener('click', () => {
+    socket.emit('requestUndo', { roomId });
+    addMessageToBox('系统', '已发送悔棋请求，等待对方同意...', 'system');
 });
 
 let selectedPiece = null;
@@ -293,22 +293,18 @@ chessBoardEl.addEventListener('click', (e) => {
 
     const row = parseInt(target.dataset.row);
     const col = parseInt(target.dataset.col);
+    const pieceData = currentRoomState.gameState.board[row][col];
 
-    const pieceEl = target.querySelector('.chess-piece');
-
-    if (pieceEl) {
-        // 点击的是有棋子的位置
-        const pieceColor = pieceEl.classList.contains('red') ? 'red' : 'black';
-        if (pieceColor === myColor) {
-            // 是自己的棋子，选中它
-            if (selectedPiece && selectedPiece.pieceEl === pieceEl) {
-                // 重复点击，取消选中
+    if (pieceData) { // 点击的位置有棋子
+        if (pieceData.color === myColor) {
+            // 是自己的棋子，选中或取消选中
+            if (selectedPiece && selectedPiece.row === row && selectedPiece.col === col) {
                 selectedPiece = null;
                 clearHighlights();
             } else {
-                selectedPiece = { pieceEl, row, col };
+                selectedPiece = { row, col };
                 clearHighlights();
-                pieceEl.classList.add('selected');
+                target.querySelector('.chess-piece').classList.add('selected');
             }
         } else if (selectedPiece) {
             // 是对方的棋子，且已选中己方棋子，执行移动（吃子）
@@ -330,22 +326,6 @@ chessBoardEl.addEventListener('click', (e) => {
         selectedPiece = null;
         clearHighlights();
     }
-});
-
-
-// 模态框事件绑定
-closeModalBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
-switchToRedBtn.addEventListener('click', () => {
-    socket.emit('requestRoleSwitch', { roomId, targetRole: 'red' });
-    roleSwitchModal.classList.remove('visible');
-});
-switchToBlackBtn.addEventListener('click', () => {
-    socket.emit('requestRoleSwitch', { roomId, targetRole: 'black' });
-    roleSwitchModal.classList.remove('visible');
-});
-switchToSpectatorBtn.addEventListener('click', () => {
-    socket.emit('requestRoleSwitch', { roomId, targetRole: 'spectator' });
-    roleSwitchModal.classList.remove('visible');
 });
 
 
