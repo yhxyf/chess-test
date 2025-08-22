@@ -235,7 +235,7 @@ h1 {
     width: 1px;
     height: 141.42%; /* sqrt(2) * 100% */
     background-color: var(--line-color);
-    left: 50%;
+    left: calc(50% + var(--cell-size) / 2); /* 往右挪半个 cell size */
     top: 50%;
 }
 .palace::before {
