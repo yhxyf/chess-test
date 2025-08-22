@@ -36,12 +36,17 @@ class DatabaseManager {
   // 添加玩家
   static addPlayer(roomId, username, color, socketId) {
     try {
-      db.prepare('INSERT INTO players (room_id, username, color, socket_id) VALUES (?, ?, ?, ?)').run(
-        roomId, username, color, socketId
-      );
+      // 使用 INSERT OR REPLACE 避免因重连导致重复插入
+      db.prepare(`
+        INSERT INTO players (room_id, username, color, socket_id) 
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(room_id, username) DO UPDATE SET
+        color = excluded.color,
+        socket_id = excluded.socket_id;
+      `).run(roomId, username, color, socketId);
       return true;
     } catch (error) {
-      console.error('添加玩家失败:', error);
+      console.error('添加或更新玩家失败:', error);
       return false;
     }
   }
@@ -56,16 +61,29 @@ class DatabaseManager {
     }
   }
 
-  // 移除玩家
+  // 按 socketId 移除玩家
   static removePlayer(roomId, socketId) {
     try {
       db.prepare('DELETE FROM players WHERE room_id = ? AND socket_id = ?').run(roomId, socketId);
       return true;
     } catch (error) {
-      console.error('移除玩家失败:', error);
+      console.error('按socketId移除玩家失败:', error);
       return false;
     }
   }
+
+  // **新增函数：按用户名移除玩家**
+  static removePlayerByUsername(roomId, username) {
+    try {
+      db.prepare('DELETE FROM players WHERE room_id = ? AND username = ?').run(roomId, username);
+      console.log(`从数据库移除玩家: ${username} @ ${roomId}`);
+      return true;
+    } catch (error) {
+      console.error('按用户名移除玩家失败:', error);
+      return false;
+    }
+  }
+
 
   // 添加观战者
   static addSpectator(roomId, username, socketId) {
@@ -145,7 +163,8 @@ class DatabaseManager {
   static getChatMessages(roomId, limit = 50) {
     try {
       return db.prepare('SELECT * FROM chat_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT ?').all(roomId, limit);
-    } catch (error) {
+    } catch (error)
+      {
       console.error('获取聊天消息失败:', error);
       return [];
     }
