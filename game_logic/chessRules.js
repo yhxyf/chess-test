@@ -7,10 +7,11 @@ const BOARD_ROWS = 10;
 const BOARD_COLS = 9;
 
 // 九宫范围
-// 黑方九宫 (top)
-const BLACK_PALACE = { rowMin: 0, rowMax: 2, colMin: 3, colMax: 5 };
-// 红方九宫 (bottom)
-const RED_PALACE = { rowMin: 7, rowMax: 9, colMin: 3, colMax: 5 };
+// 红方九宫 (bottom, low-index)
+const RED_PALACE = { rowMin: 0, rowMax: 2, colMin: 3, colMax: 5 };
+// 黑方九宫 (top, high-index)
+const BLACK_PALACE = { rowMin: 7, rowMax: 9, colMin: 3, colMax: 5 };
+
 
 // 楚河汉界
 const RIVER_ROW_BLACK_SIDE = 4; // 黑方过河线
@@ -37,9 +38,9 @@ function isInPalace(row, col, color) {
  */
 function hasCrossedRiver(row, color) {
   if (color === 'red') {
-    return row <= RIVER_ROW_BLACK_SIDE;
-  } else {
     return row >= RIVER_ROW_RED_SIDE;
+  } else {
+    return row <= RIVER_ROW_BLACK_SIDE;
   }
 }
 
@@ -142,8 +143,10 @@ function getElephantMoves(piece, board) {
     const newRow = row + dRow;
     const newCol = col + dCol;
     
-    // 检查是否在棋盘内且未过河
-    if (isInBoard(newRow, newCol) && !hasCrossedRiver(newRow, color)) {
+    // 检查是否越界以及是否过河
+    const staysOnSide = (color === 'red') ? (newRow < RIVER_ROW_RED_SIDE) : (newRow > RIVER_ROW_BLACK_SIDE);
+
+    if (isInBoard(newRow, newCol) && staysOnSide) {
         // 检查象眼是否被堵住
         const eyeRow = row + dRow / 2;
         const eyeCol = col + dCol / 2;
@@ -297,8 +300,8 @@ function getSoldierMoves(piece, board) {
   const { row, col, color } = piece;
   
   if (color === 'red') {
-    // 红方兵的移动方向是向上（行数减少）
-    const forwardRow = row - 1;
+    // 红方兵的移动方向是向上（行数增加）
+    const forwardRow = row + 1;
     if (isInBoard(forwardRow, col)) {
       const targetPiece = board[forwardRow][col];
       if (!targetPiece || targetPiece.color !== color) {
@@ -327,8 +330,8 @@ function getSoldierMoves(piece, board) {
       }
     }
   } else { // black
-    // 黑方卒的移动方向是向下（行数增加）
-    const forwardRow = row + 1;
+    // 黑方卒的移动方向是向下（行数减少）
+    const forwardRow = row - 1;
     if (isInBoard(forwardRow, col)) {
       const targetPiece = board[forwardRow][col];
       if (!targetPiece || targetPiece.color !== color) {

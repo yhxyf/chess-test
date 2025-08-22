@@ -59,69 +59,105 @@ io.on('connection', (socket) => {
     socket.leave('lobby');
     let room = rooms[roomId];
 
+    // 如果房间不在内存中，则从数据库恢复
     if (!room) {
       const roomRecord = DatabaseManager.getRoom(roomId);
+      
+      // 如果数据库中也不存在，则创建一个全新的房间
       if (!roomRecord) {
         DatabaseManager.createRoom(roomId, `房间 ${roomId}`);
+        room = {
+          id: roomId,
+          name: `房间 ${roomId}`,
+          players: [],
+          spectators: [],
+          status: 'waiting',
+          gameState: {
+            board: initializeBoard(),
+            currentPlayer: 'red'
+          }
+        };
+        DatabaseManager.saveGameState(roomId, room.gameState.board, 'red');
+      } else {
+        // 如果数据库中存在，则从数据库恢复房间状态
+        console.log(`从数据库恢复房间: ${roomId}`);
+        const dbPlayers = DatabaseManager.getPlayers(roomId);
+        const dbSpectators = DatabaseManager.getSpectators(roomId);
+        const dbGameState = DatabaseManager.getGameState(roomId);
+
+        room = {
+          id: roomRecord.id,
+          name: roomRecord.name,
+          // 注意：这里的玩家和观众socket.id是旧的，后面会更新
+          players: dbPlayers.map(p => ({ id: p.socket_id, username: p.username, color: p.color })),
+          spectators: dbSpectators.map(s => ({ id: s.socket_id, username: s.username })),
+          status: roomRecord.status,
+          gameState: dbGameState || { board: initializeBoard(), currentPlayer: 'red' }
+        };
       }
-      room = {
-        id: roomId,
-        name: `房间 ${roomId}`,
-        players: [],
-        spectators: [],
-        status: 'waiting',
-        gameState: {
-          board: initializeBoard(),
-          currentPlayer: 'red'
-        }
-      };
-      DatabaseManager.saveGameState(roomId, room.gameState.board, 'red');
       rooms[roomId] = room;
     }
 
-    // **需求2：确保用户名唯一**
+    // 确保用户名唯一
     let finalUsername = username;
     const allUsers = [...room.players, ...room.spectators];
-    while (allUsers.some(u => u.username === finalUsername)) {
-      finalUsername = `${username}${Math.floor(Math.random() * 100)}`;
-    }
-    if (finalUsername !== username) {
-      socket.emit('usernameUpdated', { newUsername: finalUsername });
+    let userExists = allUsers.find(u => u.username === finalUsername);
+
+    // 如果用户已在房间内（例如，断线重连），则更新其 socket.id
+    if (userExists) {
+        userExists.id = socket.id;
+    } else {
+      // 如果是新用户，处理潜在的用户名冲突
+      while (allUsers.some(u => u.username === finalUsername)) {
+        finalUsername = `${username}${Math.floor(Math.random() * 100)}`;
+      }
+      if (finalUsername !== username) {
+        socket.emit('usernameUpdated', { newUsername: finalUsername });
+      }
     }
     
-    let role = 'spectator';
-    if (room.players.length < 2 && room.status === 'waiting') {
-      const color = room.players.length === 0 ? 'red' : 'black';
-      room.players.push({ id: socket.id, username: finalUsername, color });
-      role = 'player';
-      DatabaseManager.addPlayer(roomId, finalUsername, color, socket.id);
-      
-      if (room.players.length === 2) {
-        room.status = 'playing';
-        DatabaseManager.updateRoomStatus(roomId, 'playing');
-        io.to(roomId).emit('roomStatusUpdate', { status: 'playing' });
-      }
+    let role;
+    // 分配角色
+    if (userExists) {
+      role = userExists.color ? 'player' : 'spectator';
     } else {
-      room.spectators.push({ id: socket.id, username: finalUsername });
-      role = 'spectator';
-      DatabaseManager.addSpectator(roomId, finalUsername, socket.id);
+        if (room.players.length < 2 && room.status !== 'playing') {
+          const color = room.players.some(p => p.color === 'red') ? 'black' : 'red';
+          room.players.push({ id: socket.id, username: finalUsername, color });
+          role = 'player';
+          DatabaseManager.addPlayer(roomId, finalUsername, color, socket.id);
+          
+          if (room.players.length === 2) {
+            room.status = 'playing';
+            DatabaseManager.updateRoomStatus(roomId, 'playing');
+            io.to(roomId).emit('roomStatusUpdate', { status: 'playing' });
+          }
+        } else {
+          room.spectators.push({ id: socket.id, username: finalUsername });
+          role = 'spectator';
+          DatabaseManager.addSpectator(roomId, finalUsername, socket.id);
+        }
     }
+
 
     socket.join(roomId);
 
-    const gameState = DatabaseManager.getGameState(roomId) || room.gameState;
-    room.gameState = gameState;
-    
+    // 发送房间信息给当前加入的用户
     socket.emit('roomInfo', { room, role, username: finalUsername });
     
     const chatHistory = DatabaseManager.getChatMessages(roomId, 50);
     socket.emit('chatHistory', chatHistory);
     
-    socket.to(roomId).emit('userJoined', { username: finalUsername, role });
+    // 通知房间内其他用户有新用户加入
+    if (!userExists) {
+        socket.to(roomId).emit('userJoined', { username: finalUsername, role });
+    }
     
+    // 向房间内所有人广播最新的玩家和观众列表
     io.to(roomId).emit('playersListUpdate', room.players);
     io.to(roomId).emit('spectatorsListUpdate', room.spectators);
     
+    // 广播大厅房间列表
     broadcastRooms();
     console.log(`用户 ${finalUsername} 以 ${role} 身份加入房间 ${roomId}`);
   });
@@ -319,6 +355,7 @@ io.on('connection', (socket) => {
         // 如果房间空了，从内存中移除
         if (room.players.length === 0 && room.spectators.length === 0) {
             delete rooms[roomId];
+            DatabaseManager.updateRoomStatus(roomId, 'finished'); // 如果没结束，也标记为结束
             broadcastRooms();
         }
       }
@@ -326,45 +363,44 @@ io.on('connection', (socket) => {
   });
 });
 
-// **需求4：修复棋盘布局**
 function initializeBoard() {
   const board = Array(10).fill(null).map(() => Array(9).fill(null));
   
-  // 黑方 (top, row 0-4)
-  board[0][0] = { color: 'black', type: 'chariot' };
-  board[0][1] = { color: 'black', type: 'horse' };
-  board[0][2] = { color: 'black', type: 'elephant' }; // 象
-  board[0][3] = { color: 'black', type: 'advisor' };  // 士
-  board[0][4] = { color: 'black', type: 'general' };   // 将
-  board[0][5] = { color: 'black', type: 'advisor' };  // 士
-  board[0][6] = { color: 'black', type: 'elephant' }; // 象
-  board[0][7] = { color: 'black', type: 'horse' };
-  board[0][8] = { color: 'black', type: 'chariot' };
-  board[2][1] = { color: 'black', type: 'cannon' };
-  board[2][7] = { color: 'black', type: 'cannon' };
-  board[3][0] = { color: 'black', type: 'soldier' };
-  board[3][2] = { color: 'black', type: 'soldier' };
-  board[3][4] = { color: 'black', type: 'soldier' };
-  board[3][6] = { color: 'black', type: 'soldier' };
-  board[3][8] = { color: 'black', type: 'soldier' };
+  // 红方 (bottom, low-index rows 0-4)
+  board[0][0] = { color: 'red', type: 'chariot' };
+  board[0][1] = { color: 'red', type: 'horse' };
+  board[0][2] = { color: 'red', type: 'elephant' }; // 相
+  board[0][3] = { color: 'red', type: 'advisor' };  // 仕
+  board[0][4] = { color: 'red', type: 'general' };   // 帅
+  board[0][5] = { color: 'red', type: 'advisor' };  // 仕
+  board[0][6] = { color: 'red', type: 'elephant' }; // 相
+  board[0][7] = { color: 'red', type: 'horse' };
+  board[0][8] = { color: 'red', type: 'chariot' };
+  board[2][1] = { color: 'red', type: 'cannon' };
+  board[2][7] = { color: 'red', type: 'cannon' };
+  board[3][0] = { color: 'red', type: 'soldier' };
+  board[3][2] = { color: 'red', type: 'soldier' };
+  board[3][4] = { color: 'red', type: 'soldier' };
+  board[3][6] = { color: 'red', type: 'soldier' };
+  board[3][8] = { color: 'red', type: 'soldier' };
   
-  // 红方 (bottom, row 5-9)
-  board[9][0] = { color: 'red', type: 'chariot' };
-  board[9][1] = { color: 'red', type: 'horse' };
-  board[9][2] = { color: 'red', type: 'elephant' }; // 相
-  board[9][3] = { color: 'red', type: 'advisor' };  // 仕
-  board[9][4] = { color: 'red', type: 'general' };   // 帅
-  board[9][5] = { color: 'red', type: 'advisor' };  // 仕
-  board[9][6] = { color: 'red', type: 'elephant' }; // 相
-  board[9][7] = { color: 'red', type: 'horse' };
-  board[9][8] = { color: 'red', type: 'chariot' };
-  board[7][1] = { color: 'red', type: 'cannon' };
-  board[7][7] = { color: 'red', type: 'cannon' };
-  board[6][0] = { color: 'red', type: 'soldier' };
-  board[6][2] = { color: 'red', type: 'soldier' };
-  board[6][4] = { color: 'red', type: 'soldier' };
-  board[6][6] = { color: 'red', type: 'soldier' };
-  board[6][8] = { color: 'red', type: 'soldier' };
+  // 黑方 (top, high-index rows 5-9)
+  board[9][0] = { color: 'black', type: 'chariot' };
+  board[9][1] = { color: 'black', type: 'horse' };
+  board[9][2] = { color: 'black', type: 'elephant' }; // 象
+  board[9][3] = { color: 'black', type: 'advisor' };  // 士
+  board[9][4] = { color: 'black', type: 'general' };   // 将
+  board[9][5] = { color: 'black', type: 'advisor' };  // 士
+  board[9][6] = { color: 'black', type: 'elephant' }; // 象
+  board[9][7] = { color: 'black', type: 'horse' };
+  board[9][8] = { color: 'black', type: 'chariot' };
+  board[7][1] = { color: 'black', type: 'cannon' };
+  board[7][7] = { color: 'black', type: 'cannon' };
+  board[6][0] = { color: 'black', type: 'soldier' };
+  board[6][2] = { color: 'black', type: 'soldier' };
+  board[6][4] = { color: 'black', type: 'soldier' };
+  board[6][6] = { color: 'black', type: 'soldier' };
+  board[6][8] = { color: 'black', type: 'soldier' };
   
   // 添加行列信息
   for(let r=0; r<10; r++) {
