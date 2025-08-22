@@ -226,8 +226,8 @@ h1 {
     pointer-events: none;
     z-index: 2;
 }
-.palace-top { top: calc(var(--cell-size) / 2); }
-.palace-bottom { bottom: calc(var(--cell-size) / 2); }
+.palace-top { top: calc(var(--cell-size) / 1); }
+.palace-bottom { bottom: calc(var(--cell-size) / 1); }
 
 .palace::before, .palace::after {
     content: '';
