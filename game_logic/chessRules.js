@@ -7,12 +7,14 @@ const BOARD_ROWS = 10;
 const BOARD_COLS = 9;
 
 // 九宫范围
-const RED_PALACE = { rowMin: 0, rowMax: 2, colMin: 3, colMax: 5 };
-const BLACK_PALACE = { rowMin: 7, rowMax: 9, colMin: 3, colMax: 5 };
+// 黑方九宫 (top)
+const BLACK_PALACE = { rowMin: 0, rowMax: 2, colMin: 3, colMax: 5 };
+// 红方九宫 (bottom)
+const RED_PALACE = { rowMin: 7, rowMax: 9, colMin: 3, colMax: 5 };
 
 // 楚河汉界
-const RIVER_ROW_RED = 4;
-const RIVER_ROW_BLACK = 5;
+const RIVER_ROW_BLACK_SIDE = 4; // 黑方过河线
+const RIVER_ROW_RED_SIDE = 5;   // 红方过河线
 
 /**
  * 检查位置是否在棋盘内
@@ -35,9 +37,9 @@ function isInPalace(row, col, color) {
  */
 function hasCrossedRiver(row, color) {
   if (color === 'red') {
-    return row > RIVER_ROW_RED;
+    return row <= RIVER_ROW_BLACK_SIDE;
   } else {
-    return row < RIVER_ROW_BLACK;
+    return row >= RIVER_ROW_RED_SIDE;
   }
 }
 
@@ -65,53 +67,39 @@ function getGeneralMoves(piece, board) {
     }
   }
   
-  // 检查飞将规则
-  const opponentGeneralRow = findOpponentGeneralRow(board, color);
-  if (opponentGeneralRow !== -1) {
-    // 检查是否在同一条直线上
-    if (col === board[opponentGeneralRow][4].col) {
-      // 检查中间是否有棋子
+  // 飞将规则
+  const opponentColor = color === 'red' ? 'black' : 'red';
+  let opponentGeneral = null;
+  // 查找对方的将
+  for (let r = 0; r < BOARD_ROWS; r++) {
+      for (let c = 0; c < BOARD_COLS; c++) {
+          const p = board[r][c];
+          if (p && p.type === 'general' && p.color === opponentColor) {
+              opponentGeneral = p;
+              break;
+          }
+      }
+      if (opponentGeneral) break;
+  }
+  
+  if (opponentGeneral && opponentGeneral.col === col) {
       let hasPieceBetween = false;
-      const startRow = Math.min(row, opponentGeneralRow) + 1;
-      const endRow = Math.max(row, opponentGeneralRow);
-      
+      const startRow = Math.min(row, opponentGeneral.row) + 1;
+      const endRow = Math.max(row, opponentGeneral.row);
       for (let r = startRow; r < endRow; r++) {
-        if (board[r][col]) {
-          hasPieceBetween = true;
-          break;
-        }
+          if (board[r][col]) {
+              hasPieceBetween = true;
+              break;
+          }
       }
-      
-      // 如果中间没有棋子，不能移动到会导致飞将的位置
       if (!hasPieceBetween) {
-        // 移除会导致飞将的移动
-        moves = moves.filter(move => move.col !== col);
+          moves.push({ row: opponentGeneral.row, col: opponentGeneral.col });
       }
-    }
   }
   
   return moves;
 }
 
-/**
- * 查找对方帅/将的行位置
- */
-function findOpponentGeneralRow(board, color) {
-  const opponentColor = color === 'red' ? 'black' : 'red';
-  const opponentRow = opponentColor === 'red' ? 0 : 9;
-  
-  // 在对方九宫中查找帅/将
-  for (let r = opponentRow; r <= opponentRow + 2; r++) {
-    for (let c = 3; c <= 5; c++) {
-      const piece = board[r][c];
-      if (piece && piece.type === 'general' && piece.color === opponentColor) {
-        return r;
-      }
-    }
-  }
-  
-  return -1;
-}
 
 /**
  * 获取仕/士的合法移动位置
@@ -154,11 +142,8 @@ function getElephantMoves(piece, board) {
     const newRow = row + dRow;
     const newCol = col + dCol;
     
-    // 检查是否在棋盘内
-    if (isInBoard(newRow, newCol)) {
-      // 检查是否过河
-      if ((color === 'red' && newRow <= RIVER_ROW_RED) || 
-          (color === 'black' && newRow >= RIVER_ROW_BLACK)) {
+    // 检查是否在棋盘内且未过河
+    if (isInBoard(newRow, newCol) && !hasCrossedRiver(newRow, color)) {
         // 检查象眼是否被堵住
         const eyeRow = row + dRow / 2;
         const eyeCol = col + dCol / 2;
@@ -169,7 +154,6 @@ function getElephantMoves(piece, board) {
             moves.push({ row: newRow, col: newCol });
           }
         }
-      }
     }
   }
   
@@ -180,48 +164,42 @@ function getElephantMoves(piece, board) {
  * 获取马的合法移动位置
  */
 function getHorseMoves(piece, board) {
-  const moves = [];
-  const { row, col, color } = piece;
-  
-  // 马的走法：先直走一格，再斜走一格
-  // 可能的移动方向
-  const directions = [
-    // 先向上走
-    { leg: [-1, 0], moves: [[-1, -1], [-1, 1]] },
-    // 先向下走
-    { leg: [1, 0], moves: [[1, -1], [1, 1]] },
-    // 先向左走
-    { leg: [0, -1], moves: [[-1, -1], [1, -1]] },
-    // 先向右走
-    { leg: [0, 1], moves: [[-1, 1], [1, 1]] }
-  ];
-  
-  for (const direction of directions) {
-    const [legRow, legCol] = direction.leg;
-    const legPosRow = row + legRow;
-    const legPosCol = col + legCol;
-    
-    // 检查马腿是否被堵住
-    if (isInBoard(legPosRow, legPosCol) && !board[legPosRow][legPosCol]) {
-      // 计算可能的移动位置
-      for (const [dRow, dCol] of direction.moves) {
+    const moves = [];
+    const { row, col, color } = piece;
+
+    const directions = [
+        [-2, -1], [-2, 1], // 上
+        [2, -1], [2, 1],   // 下
+        [-1, -2], [1, -2], // 左
+        [-1, 2], [1, 2]    // 右
+    ];
+
+    for (const [dRow, dCol] of directions) {
         const newRow = row + dRow;
         const newCol = col + dCol;
-        
-        // 检查是否在棋盘内
+
         if (isInBoard(newRow, newCol)) {
-          // 检查目标位置是否为空或者有敌方棋子
-          const targetPiece = board[newRow][newCol];
-          if (!targetPiece || targetPiece.color !== color) {
-            moves.push({ row: newRow, col: newCol });
-          }
+            // 检查马腿
+            let legRow, legCol;
+            if (Math.abs(dRow) === 2) { // 竖着走
+                legRow = row + dRow / 2;
+                legCol = col;
+            } else { // 横着走
+                legRow = row;
+                legCol = col + dCol / 2;
+            }
+
+            if (!board[legRow][legCol]) {
+                const targetPiece = board[newRow][newCol];
+                if (!targetPiece || targetPiece.color !== color) {
+                    moves.push({ row: newRow, col: newCol });
+                }
+            }
         }
-      }
     }
-  }
-  
-  return moves;
+    return moves;
 }
+
 
 /**
  * 获取车的合法移动位置
@@ -319,9 +297,8 @@ function getSoldierMoves(piece, board) {
   const { row, col, color } = piece;
   
   if (color === 'red') {
-    // 红方兵的移动方向是向下（行数增加）
-    // 向前移动
-    const forwardRow = row + 1;
+    // 红方兵的移动方向是向上（行数减少）
+    const forwardRow = row - 1;
     if (isInBoard(forwardRow, col)) {
       const targetPiece = board[forwardRow][col];
       if (!targetPiece || targetPiece.color !== color) {
@@ -349,10 +326,9 @@ function getSoldierMoves(piece, board) {
         }
       }
     }
-  } else {
-    // 黑方卒的移动方向是向上（行数减少）
-    // 向前移动
-    const forwardRow = row - 1;
+  } else { // black
+    // 黑方卒的移动方向是向下（行数增加）
+    const forwardRow = row + 1;
     if (isInBoard(forwardRow, col)) {
       const targetPiece = board[forwardRow][col];
       if (!targetPiece || targetPiece.color !== color) {
@@ -384,6 +360,7 @@ function getSoldierMoves(piece, board) {
   
   return moves;
 }
+
 
 /**
  * 获取棋子的合法移动位置
@@ -486,12 +463,15 @@ function isCheckmate(color, board) {
         const validMoves = getValidMoves(piece, board);
         for (const move of validMoves) {
           // 模拟移动
-          const newBoard = JSON.parse(JSON.stringify(board));
-          newBoard[move.row][move.col] = piece;
-          newBoard[row][col] = null;
+          const tempBoard = JSON.parse(JSON.stringify(board));
+          const movingPiece = tempBoard[row][col];
+          movingPiece.row = move.row;
+          movingPiece.col = move.col;
+          tempBoard[move.row][move.col] = movingPiece;
+          tempBoard[row][col] = null;
           
           // 检查移动后是否还被将军
-          if (!isCheck(color, newBoard)) {
+          if (!isCheck(color, tempBoard)) {
             // 如果有一步移动可以解除将军，就不是将死
             return false;
           }

@@ -11,46 +11,53 @@
         <header>
             <h1>实时网页象棋</h1>
             <div id="roomInfo">
-                <!-- 房间信息将通过 JavaScript 动态生成 -->
-            </div>
+                </div>
         </header>
         
         <main>
             <div class="game-container">
                 <div class="board-container">
                     <div id="chessBoard" class="chess-board">
-                        <!-- 棋盘将通过 JavaScript 动态生成 -->
-                    </div>
+                        </div>
                 </div>
                 
                 <div class="side-panel">
                     <div class="players-info">
                         <h3>玩家</h3>
                         <ul id="playersList">
-                            <!-- 玩家列表将通过 JavaScript 动态生成 -->
-                        </ul>
+                            </ul>
                     </div>
                     
                     <div class="spectators-info">
                         <h3>观战者 (<span id="spectatorCount">0</span>)</h3>
                         <ul id="spectatorsList">
-                            <!-- 观战者列表将通过 JavaScript 动态生成 -->
-                        </ul>
+                            </ul>
                     </div>
                     
                     <div class="chat-container">
                         <h3>聊天</h3>
                         <div id="chatMessages" class="chat-messages">
-                            <!-- 聊天消息将通过 JavaScript 动态生成 -->
-                        </div>
+                            </div>
                         <div class="chat-input">
                             <input type="text" id="messageInput" placeholder="输入消息..." />
-                            <button id="sendMessageBtn">发送</button>
+                            <button id="sendMessageBtn" class="btn">发送</button>
                         </div>
                     </div>
                 </div>
             </div>
         </main>
+    </div>
+
+    <div id="roleSwitchModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>选择你的角色</h3>
+            <div id="modalActions" class="modal-actions">
+                <button id="switchToRedBtn" class="btn">成为红方</button>
+                <button id="switchToBlackBtn" class="btn">成为黑方</button>
+                <button id="switchToSpectatorBtn" class="btn">成为观战者</button>
+            </div>
+            <button id="closeModalBtn" class="btn" style="margin-top: 20px; background-color: #777;">取消</button>
+        </div>
     </div>
     
     <script src="/socket.io/socket.io.js"></script>

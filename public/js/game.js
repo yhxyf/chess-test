@@ -5,7 +5,8 @@ const socket = io();
 const roomId = window.location.pathname.split('/')[2];
 let myUsername = '';
 let myRole = '';
-let selectedPiece = null;
+let myColor = '';
+let currentRoomState = {};
 
 const roomInfoEl = document.getElementById('roomInfo');
 const chessBoardEl = document.getElementById('chessBoard');
@@ -15,6 +16,14 @@ const spectatorCountEl = document.getElementById('spectatorCount');
 const chatMessagesEl = document.getElementById('chatMessages');
 const messageInputEl = document.getElementById('messageInput');
 const sendMessageBtnEl = document.getElementById('sendMessageBtn');
+
+// 模态框元素
+const roleSwitchModal = document.getElementById('roleSwitchModal');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const modalActions = document.getElementById('modalActions');
+const switchToRedBtn = document.getElementById('switchToRedBtn');
+const switchToBlackBtn = document.getElementById('switchToBlackBtn');
+const switchToSpectatorBtn = document.getElementById('switchToSpectatorBtn');
 
 // 获取用户名
 const promptedUsername = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
@@ -34,8 +43,12 @@ socket.on('usernameUpdated', ({ newUsername }) => {
 socket.on('roomInfo', ({ room, role, username }) => {
     myUsername = username;
     myRole = role;
+    currentRoomState = room; // 保存房间状态
+    const me = room.players.find(p => p.username === myUsername);
+    myColor = me ? me.color : '';
+
     updateRoomInfo(room, role);
-    renderBoard(room.gameState.board);
+    renderBoard(room.gameState.board, room.gameState.currentPlayer);
     updatePlayersList(room.players);
     updateSpectatorsList(room.spectators);
 });
@@ -56,20 +69,26 @@ socket.on('userLeft', ({ username }) => {
 socket.on('userRoleChanged', ({ username, newRole }) => {
     if (username === myUsername) {
         myRole = newRole;
-        // 重新获取房间信息来更新UI
-        socket.emit('getRoomInfo', { roomId });
+        // 更新自身颜色
+        const meAsPlayer = currentRoomState.players.find(p => p.username === myUsername);
+        myColor = (newRole === 'player' && meAsPlayer) ? meAsPlayer.color : '';
     }
     addMessageToBox(username, `切换角色为 ${newRole === 'player' ? '玩家' : '观战者'}`, 'system');
 });
 
 
-socket.on('playersListUpdate', updatePlayersList);
-socket.on('spectatorsListUpdate', updateSpectatorsList);
+socket.on('playersListUpdate', (players) => {
+    currentRoomState.players = players; // 更新本地房间状态
+    updatePlayersList(players);
+});
+socket.on('spectatorsListUpdate', (spectators) => {
+    currentRoomState.spectators = spectators; // 更新本地房间状态
+    updateSpectatorsList(spectators);
+});
 
 socket.on('gameStateUpdate', (gameState) => {
-    renderBoard(gameState.board);
-    document.querySelector('.side-panel').classList.toggle('red-turn', gameState.currentPlayer === 'red');
-    document.querySelector('.side-panel').classList.toggle('black-turn', gameState.currentPlayer === 'black');
+    currentRoomState.gameState = gameState;
+    renderBoard(gameState.board, gameState.currentPlayer);
 });
 
 socket.on('newMessage', ({ username, message }) => {
@@ -82,7 +101,13 @@ socket.on('moveRejected', ({ reason }) => {
     clearHighlights();
 });
 
-socket.on('roleSwitchRejected', ({ reason }) => alert(`角色切换失败: ${reason}`));
+socket.on('roleSwitchError', ({ reason }) => alert(`角色切换失败: ${reason}`));
+
+socket.on('roleSwitchRequest', ({ fromUser, targetRole }) => {
+    const accepted = confirm(`${fromUser.username} 想成为 ${targetRole === 'red' ? '红方' : '黑方'}，您是否同意与他交换角色（您将成为观战者）？`);
+    socket.emit('roleSwitchResponse', { accepted, fromUser, targetRole });
+});
+
 
 socket.on('gameOver', ({ winner, reason }) => {
     const winnerName = winner === 'red' ? '红方' : '黑方';
@@ -102,18 +127,19 @@ function updateRoomInfo(room, role) {
         <p>状态: <span class="status-text">${room.status}</span></p>
         <p>您的身份: ${role === 'player' ? '玩家' : '观战者'} (${myUsername})</p>
     `;
-    // 只有等待时才显示切换按钮
-    if (room.status === 'waiting') {
-        const switchBtn = document.createElement('button');
-        switchBtn.className = 'btn';
-        switchBtn.textContent = '切换角色';
-        switchBtn.onclick = () => socket.emit('switchRole', { roomId, username: myUsername });
-        roomInfoEl.appendChild(switchBtn);
-    }
+    const switchBtn = document.createElement('button');
+    switchBtn.id = 'openRoleSwitchModalBtn';
+    switchBtn.className = 'btn';
+    switchBtn.textContent = '切换角色';
+    roomInfoEl.appendChild(switchBtn);
+
+    switchBtn.addEventListener('click', openRoleSwitchModal);
 }
 
-function renderBoard(board) {
+function renderBoard(board, currentPlayer) {
     chessBoardEl.innerHTML = '';
+    const isMyTurn = myColor === currentPlayer;
+
     for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 9; c++) {
             const cell = document.createElement('div');
@@ -125,6 +151,9 @@ function renderBoard(board) {
             if (pieceData) {
                 const pieceEl = document.createElement('div');
                 pieceEl.className = `chess-piece ${pieceData.color}`;
+                if (pieceData.color === myColor && isMyTurn) {
+                    pieceEl.classList.add('playable');
+                }
                 pieceEl.textContent = getPieceSymbol(pieceData);
                 pieceEl.dataset.row = r;
                 pieceEl.dataset.col = c;
@@ -134,6 +163,11 @@ function renderBoard(board) {
         }
     }
     addBoardFeatures();
+    
+    // 更新回合提示
+    const sidePanel = document.querySelector('.side-panel');
+    sidePanel.classList.toggle('red-turn', currentPlayer === 'red');
+    sidePanel.classList.toggle('black-turn', currentPlayer === 'black');
 }
 
 
@@ -165,14 +199,20 @@ function getPieceSymbol(piece) {
 
 function updatePlayersList(players) {
     playersListEl.innerHTML = '';
-    players.forEach(p => {
-        const li = document.createElement('li');
-        const colorText = p.color === 'red' ? ' (红方)' : ' (黑方)';
-        li.textContent = p.username + colorText;
-        if(p.username === myUsername) li.style.fontWeight = 'bold';
-        playersListEl.appendChild(li);
-    });
+    const blackPlayer = players.find(p => p.color === 'black');
+    const redPlayer = players.find(p => p.color === 'red');
+
+    const blackLi = document.createElement('li');
+    blackLi.textContent = `黑方: ${blackPlayer ? blackPlayer.username : '(空位)'}`;
+    if(blackPlayer && blackPlayer.username === myUsername) blackLi.style.fontWeight = 'bold';
+    playersListEl.appendChild(blackLi);
+
+    const redLi = document.createElement('li');
+    redLi.textContent = `红方: ${redPlayer ? redPlayer.username : '(空位)'}`;
+    if(redPlayer && redPlayer.username === myUsername) redLi.style.fontWeight = 'bold';
+    playersListEl.appendChild(redLi);
 }
+
 
 function updateSpectatorsList(spectators) {
     spectatorsListEl.innerHTML = '';
@@ -208,12 +248,26 @@ function clearHighlights() {
     });
 }
 
+// --- 角色切换模态框逻辑 ---
+function openRoleSwitchModal() {
+    // 根据当前房间状态，禁用/启用按钮
+    const isRedOccupied = currentRoomState.players.some(p => p.color === 'red');
+    const isBlackOccupied = currentRoomState.players.some(p => p.color === 'black');
+    
+    switchToRedBtn.disabled = myColor === 'red';
+    switchToBlackBtn.disabled = myColor === 'black';
+    switchToSpectatorBtn.disabled = myRole === 'spectator';
+    
+    roleSwitchModal.classList.add('visible');
+}
+
 // --- 事件绑定 ---
 sendMessageBtnEl.addEventListener('click', sendMessage);
 messageInputEl.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
 });
 
+let selectedPiece = null;
 chessBoardEl.addEventListener('click', (e) => {
     if (myRole !== 'player') return;
 
@@ -223,11 +277,34 @@ chessBoardEl.addEventListener('click', (e) => {
     const row = parseInt(target.dataset.row);
     const col = parseInt(target.dataset.col);
 
-    if (target.classList.contains('chess-piece')) {
-        selectedPiece = { pieceEl: target, row, col };
-        clearHighlights();
-        target.classList.add('selected');
-    } else if (selectedPiece) { // 点击棋盘空位
+    const pieceEl = target.closest('.chess-piece');
+
+    if (pieceEl) {
+        // 点击的是棋子
+        const pieceColor = pieceEl.classList.contains('red') ? 'red' : 'black';
+        if (pieceColor === myColor) {
+            // 是自己的棋子，选中它
+            if (selectedPiece && selectedPiece.pieceEl === pieceEl) {
+                // 重复点击，取消选中
+                selectedPiece = null;
+                clearHighlights();
+            } else {
+                selectedPiece = { pieceEl, row, col };
+                clearHighlights();
+                pieceEl.classList.add('selected');
+            }
+        } else if (selectedPiece) {
+            // 是对方的棋子，且已选中己方棋子，执行移动（吃子）
+            socket.emit('playerMove', {
+                roomId,
+                from: { row: selectedPiece.row, col: selectedPiece.col },
+                to: { row, col }
+            });
+            selectedPiece = null;
+            clearHighlights();
+        }
+    } else if (selectedPiece) { 
+        // 点击的是空位，且已选中棋子，执行移动
         socket.emit('playerMove', {
             roomId,
             from: { row: selectedPiece.row, col: selectedPiece.col },
@@ -237,5 +314,22 @@ chessBoardEl.addEventListener('click', (e) => {
         clearHighlights();
     }
 });
+
+
+// 模态框事件绑定
+closeModalBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
+switchToRedBtn.addEventListener('click', () => {
+    socket.emit('requestRoleSwitch', { roomId, targetRole: 'red' });
+    roleSwitchModal.classList.remove('visible');
+});
+switchToBlackBtn.addEventListener('click', () => {
+    socket.emit('requestRoleSwitch', { roomId, targetRole: 'black' });
+    roleSwitchModal.classList.remove('visible');
+});
+switchToSpectatorBtn.addEventListener('click', () => {
+    socket.emit('requestRoleSwitch', { roomId, targetRole: 'spectator' });
+    roleSwitchModal.classList.remove('visible');
+});
+
 
 addMessageToBox('系统', '欢迎来到象棋房间！', 'system');
