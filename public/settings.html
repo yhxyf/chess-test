@@ -10,10 +10,12 @@
             margin-bottom: 20px;
             display: flex;
             align-items: center;
+            gap: 15px;
         }
         .setting-item label {
             width: 150px;
             font-weight: 500;
+            flex-shrink: 0;
         }
         .setting-item input[type="text"] {
             width: 300px;
@@ -27,6 +29,10 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             padding: 2px;
+            cursor: pointer;
+        }
+        .container {
+            max-width: 800px;
         }
     </style>
 </head>
@@ -40,10 +46,15 @@
         <main>
             <section class="room-section">
                 <h2>个性化设置</h2>
+                
                 <div class="setting-item">
                     <label for="pageTitle">页面标题:</label>
                     <input type="text" id="pageTitle" placeholder="例如：我的象棋室">
                 </div>
+                
+                <hr style="margin: 25px 0; border: 1px solid #f0f0f0;">
+
+                <h3>棋子颜色</h3>
                 <div class="setting-item">
                     <label for="redPieceColor">红方棋子颜色:</label>
                     <input type="color" id="redPieceColor" value="#c0392b">
@@ -52,7 +63,22 @@
                     <label for="blackPieceColor">黑方棋子颜色:</label>
                     <input type="color" id="blackPieceColor" value="#2c3e50">
                 </div>
+
+                <hr style="margin: 25px 0; border: 1px solid #f0f0f0;">
+                
+                <h3>棋盘颜色</h3>
+                <div class="setting-item">
+                    <label for="boardBgColor">棋盘背景颜色:</label>
+                    <input type="color" id="boardBgColor" value="#e6c5a1">
+                </div>
+                <div class="setting-item">
+                    <label for="boardLineColor">棋盘线条颜色:</label>
+                    <input type="color" id="boardLineColor" value="#6b4724">
+                </div>
+
+                <br>
                 <button id="saveSettingsBtn" class="btn">保存设置</button>
+                <button id="resetSettingsBtn" class="btn" style="background-color: #777;">恢复默认</button>
             </section>
         </main>
     </div>
