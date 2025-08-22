@@ -1,9 +1,23 @@
 // game.js - 游戏房间页面的 JavaScript
 
+function applyCustomSettings() {
+    const savedSettings = JSON.parse(localStorage.getItem('chessSettings')) || {};
+    if (savedSettings.title) {
+        document.title = savedSettings.title;
+    }
+    if (savedSettings.redColor) {
+        document.documentElement.style.setProperty('--red-piece-text', savedSettings.redColor);
+    }
+    if (savedSettings.blackColor) {
+        document.documentElement.style.setProperty('--black-piece-text', savedSettings.blackColor);
+    }
+}
+
+applyCustomSettings();
+
 const socket = io();
 
 const roomId = window.location.pathname.split('/')[2];
-let myUsername = '';
 let myRole = '';
 let myColor = '';
 let currentRoomState = {};
@@ -17,6 +31,7 @@ const chatMessagesEl = document.getElementById('chatMessages');
 const messageInputEl = document.getElementById('messageInput');
 const sendMessageBtnEl = document.getElementById('sendMessageBtn');
 const undoBtn = document.getElementById('undoBtn');
+const restartBtn = document.getElementById('restartBtn'); // 获取新按钮
 
 // 模态框元素
 const roleSwitchModal = document.getElementById('roleSwitchModal');
@@ -26,9 +41,12 @@ const switchToRedBtn = document.getElementById('switchToRedBtn');
 const switchToBlackBtn = document.getElementById('switchToBlackBtn');
 const switchToSpectatorBtn = document.getElementById('switchToSpectatorBtn');
 
-// 获取用户名
-const promptedUsername = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
-myUsername = promptedUsername;
+// --- 修改：从 localStorage 获取用户名 ---
+let myUsername = localStorage.getItem('chessUsername');
+if (!myUsername) {
+    myUsername = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
+    localStorage.setItem('chessUsername', myUsername);
+}
 
 // 加入房间
 socket.emit('joinRoom', { roomId, username: myUsername });
@@ -38,6 +56,7 @@ socket.emit('joinRoom', { roomId, username: myUsername });
 
 socket.on('usernameUpdated', ({ newUsername }) => {
     myUsername = newUsername;
+    localStorage.setItem('chessUsername', newUsername); // 更新存储的用户名
     alert(`用户名已存在，您的用户名已更新为: ${myUsername}`);
 });
 
@@ -89,7 +108,7 @@ socket.on('newMessage', ({ username, message }) => {
 
 socket.on('moveRejected', ({ reason }) => {
     alert(`移动被拒绝: ${reason}`);
-    selectedPiece = null; 
+    selectedPiece = null;
     clearHighlights();
 });
 
@@ -98,7 +117,12 @@ socket.on('gameOver', ({ winner, reason }) => {
     if (reason) {
         message += ` (${reason})`;
     }
-    setTimeout(() => alert(message), 100);
+    setTimeout(() => {
+        alert(message);
+        if (myRole === 'player') {
+            restartBtn.style.display = 'inline-block'; // 游戏结束后显示按钮
+        }
+    }, 100);
 });
 
 // 新增：悔棋相关事件
@@ -111,6 +135,11 @@ socket.on('systemMessage', ({ message }) => {
     addMessageToBox('系统', message, 'system');
 });
 
+// 新增：重新开始相关事件
+socket.on('restartRequest', ({ from }) => {
+    const accepted = confirm(`${from} 请求重新开始游戏，你是否同意？`);
+    socket.emit('restartResponse', { roomId, accepted });
+});
 
 // --- DOM 操作函数 ---
 
@@ -125,12 +154,15 @@ function updateRoomInfo(room, role) {
 socket.on('roomStatusUpdate', ({ status }) => {
     const statusEl = document.getElementById('roomStatusText');
     if(statusEl) statusEl.textContent = status;
+    if (status === 'playing') {
+        restartBtn.style.display = 'none'; // 游戏开始后隐藏按钮
+    }
 });
 
 function renderBoard(board, currentPlayer) {
     chessBoardEl.innerHTML = '';
     const isMyTurn = myColor === currentPlayer && myRole === 'player';
-    
+
     // **已回退**：移除镜像逻辑，始终以红方在下的视角渲染
     for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 9; c++) {
@@ -138,7 +170,7 @@ function renderBoard(board, currentPlayer) {
             cell.className = 'board-cell';
             cell.dataset.row = r;
             cell.dataset.col = c;
-            
+
             const pieceData = board[r][c];
             if (pieceData) {
                 const pieceEl = document.createElement('div');
@@ -154,9 +186,9 @@ function renderBoard(board, currentPlayer) {
             chessBoardEl.appendChild(cell);
         }
     }
-    
+
     addBoardFeatures();
-    
+
     const sidePanel = document.querySelector('.side-panel');
     sidePanel.classList.toggle('red-turn', currentPlayer === 'red');
     sidePanel.classList.toggle('black-turn', currentPlayer === 'black');
@@ -166,11 +198,11 @@ function addBoardFeatures() {
     const palaceTop = document.createElement('div');
     palaceTop.className = 'palace palace-top';
     chessBoardEl.appendChild(palaceTop);
-    
+
     const palaceBottom = document.createElement('div');
     palaceBottom.className = 'palace palace-bottom';
     chessBoardEl.appendChild(palaceBottom);
-    
+
     // **已回退**：恢复静态文本
     const chuHe = document.createElement('div');
     chuHe.className = 'river-text chu-he';
@@ -231,7 +263,7 @@ function updateCapturedPieces(captured) {
 
     const redContainer = document.querySelector('#capturedForRed .pieces-container');
     const blackContainer = document.querySelector('#capturedForBlack .pieces-container');
-    
+
     redContainer.innerHTML = '';
     blackContainer.innerHTML = '';
 
@@ -284,6 +316,11 @@ undoBtn.addEventListener('click', () => {
     addMessageToBox('系统', '已发送悔棋请求，等待对方同意...', 'system');
 });
 
+restartBtn.addEventListener('click', () => {
+    socket.emit('requestRestart', { roomId });
+    addMessageToBox('系统', '已发送重新开始请求...', 'system');
+});
+
 let selectedPiece = null;
 chessBoardEl.addEventListener('click', (e) => {
     if (myRole !== 'player') return;
@@ -316,7 +353,7 @@ chessBoardEl.addEventListener('click', (e) => {
             selectedPiece = null;
             clearHighlights();
         }
-    } else if (selectedPiece) { 
+    } else if (selectedPiece) {
         // 点击的是空位，且已选中棋子，执行移动
         socket.emit('playerMove', {
             roomId,

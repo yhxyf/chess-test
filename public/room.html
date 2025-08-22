@@ -11,21 +11,22 @@
         <header>
             <h1>实时网页象棋</h1>
             <div id="roomInfo">
-                </div>
+            </div>
+            <a href="/" class="btn" style="position: absolute; top: 20px; left: 20px;">返回主页</a>
         </header>
         
         <main>
             <div class="game-container">
                 <div class="board-container">
                     <div id="chessBoard" class="chess-board">
-                        </div>
+                    </div>
                 </div>
                 
                 <div class="side-panel">
                     <div class="players-info">
                         <h3>玩家</h3>
                         <ul id="playersList">
-                            </ul>
+                        </ul>
                         <div class="captured-pieces" id="capturedForBlack">
                             <h4>黑方被吃</h4>
                             <div class="pieces-container"></div>
@@ -39,13 +40,13 @@
                     <div class="spectators-info">
                         <h3>观战者 (<span id="spectatorCount">0</span>)</h3>
                         <ul id="spectatorsList">
-                            </ul>
+                        </ul>
                     </div>
                     
                     <div class="chat-container">
                         <h3>聊天</h3>
                         <div id="chatMessages" class="chat-messages">
-                            </div>
+                        </div>
                         <div class="chat-input">
                             <input type="text" id="messageInput" placeholder="输入消息..." />
                             <button id="sendMessageBtn" class="btn">发送</button>
@@ -54,6 +55,7 @@
 
                     <div class="game-actions">
                         <button id="undoBtn" class="btn">请求悔棋</button>
+                        <button id="restartBtn" class="btn" style="display: none;">重新开始</button>
                     </div>
                 </div>
             </div>

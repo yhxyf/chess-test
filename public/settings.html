@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置 - 实时网页象棋</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .setting-item {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .setting-item label {
+            width: 150px;
+            font-weight: 500;
+        }
+        .setting-item input[type="text"] {
+            width: 300px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .setting-item input[type="color"] {
+            width: 50px;
+            height: 35px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>设置</h1>
+            <a href="/" class="btn" style="position: absolute; top: 20px; right: 20px;">返回主页</a>
+        </header>
+        
+        <main>
+            <section class="room-section">
+                <h2>个性化设置</h2>
+                <div class="setting-item">
+                    <label for="pageTitle">页面标题:</label>
+                    <input type="text" id="pageTitle" placeholder="例如：我的象棋室">
+                </div>
+                <div class="setting-item">
+                    <label for="redPieceColor">红方棋子颜色:</label>
+                    <input type="color" id="redPieceColor" value="#c0392b">
+                </div>
+                <div class="setting-item">
+                    <label for="blackPieceColor">黑方棋子颜色:</label>
+                    <input type="color" id="blackPieceColor" value="#2c3e50">
+                </div>
+                <button id="saveSettingsBtn" class="btn">保存设置</button>
+            </section>
+        </main>
+    </div>
+    
+    <script src="/js/settings.js"></script>
+</body>
+</html>

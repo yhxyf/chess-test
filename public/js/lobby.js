@@ -1,5 +1,20 @@
 // lobby.js - 大厅页面的 JavaScript
 
+function applyCustomSettings() {
+    const savedSettings = JSON.parse(localStorage.getItem('chessSettings')) || {};
+    if (savedSettings.title) {
+        document.title = savedSettings.title;
+    }
+    if (savedSettings.redColor) {
+        document.documentElement.style.setProperty('--red-piece-text', savedSettings.redColor);
+    }
+    if (savedSettings.blackColor) {
+        document.documentElement.style.setProperty('--black-piece-text', savedSettings.blackColor);
+    }
+}
+
+applyCustomSettings();
+
 const socket = io();
 
 const createRoomBtn = document.getElementById('createRoomBtn');
@@ -20,6 +35,12 @@ createRoomBtn.addEventListener('click', () => {
 });
 
 function joinRoom(roomId) {
+    // 确保用户名已设置
+    let username = localStorage.getItem('chessUsername');
+    if (!username) {
+        username = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
+        localStorage.setItem('chessUsername', username);
+    }
     window.location.href = `/room/${roomId}`;
 }
 

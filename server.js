@@ -23,6 +23,12 @@ app.get('/room/:roomId', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
 });
 
+// 新增：设置页路由
+app.get('/settings.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+});
+
+
 // 广播大厅的房间列表
 function broadcastRooms() {
     const roomList = Object.values(rooms).map(room => ({
@@ -301,6 +307,44 @@ io.on('connection', (socket) => {
           }
       }
   });
+
+  // 新增：请求重新开始
+    socket.on('requestRestart', ({ roomId }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player) return;
+
+        const opponent = room.players.find(p => p.id && p.id !== socket.id);
+        if (opponent) {
+            io.to(opponent.id).emit('restartRequest', { from: player.username });
+        } else {
+            socket.emit('systemMessage', { message: '对手已离线，无法重新开始。' });
+        }
+    });
+
+    // 新增：响应重新开始
+    socket.on('restartResponse', ({ roomId, accepted }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+
+        if (accepted) {
+            console.log(`房间 ${roomId} 同意重新开始`);
+            room.status = 'playing';
+            room.gameState = initializeGameState();
+            DatabaseManager.updateRoomStatus(roomId, 'playing');
+            DatabaseManager.saveGameState(roomId, room.gameState.board, 'red');
+            io.to(roomId).emit('gameStateUpdate', room.gameState);
+            io.to(roomId).emit('roomStatusUpdate', { status: 'playing' });
+            io.to(roomId).emit('systemMessage', { message: '双方同意，游戏已重新开始！' });
+            broadcastRooms();
+        } else {
+            const requester = room.players.find(p => p.id !== socket.id);
+            if (requester && requester.id) {
+                io.to(requester.id).emit('systemMessage', { message: '对方拒绝了重新开始的请求。' });
+            }
+        }
+    });
 
 
   // 聊天消息
