@@ -43,6 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendMessageBtnEl = document.getElementById('sendMessageBtn');
     const undoBtn = document.getElementById('undoBtn');
     const restartBtn = document.getElementById('restartBtn');
+    const flipBoardBtn = document.getElementById('flipBoardBtn');
+    let isBoardFlipped = false;
 
     // --- 从 localStorage 获取用户名 ---
     let myUsername = localStorage.getItem('chessUsername');
@@ -181,6 +183,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     pieceEl.textContent = getPieceSymbol(pieceData);
                     pieceEl.dataset.row = r;
                     pieceEl.dataset.col = c;
+                    
+                    // 保持棋子翻转状态
+                    if(isBoardFlipped) {
+                        pieceEl.style.transform = 'translate(-50%, -50%) rotate(180deg)';
+                    }
+
                     cell.appendChild(pieceEl);
                 }
                 chessBoardEl.appendChild(cell);
@@ -316,6 +324,22 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.emit('requestRestart', { roomId });
         addMessageToBox('系统', '已发送重新开始请求...', 'system');
     });
+
+    // 新增：翻转棋盘事件
+    flipBoardBtn.addEventListener('click', () => {
+        isBoardFlipped = !isBoardFlipped;
+        chessBoardEl.style.transition = 'transform 0.5s ease-in-out';
+        chessBoardEl.style.transform = isBoardFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
+
+        const pieces = chessBoardEl.querySelectorAll('.chess-piece');
+        pieces.forEach(piece => {
+            piece.style.transition = 'transform 0.5s ease-in-out';
+            piece.style.transform = isBoardFlipped 
+                ? 'translate(-50%, -50%) rotate(180deg)' 
+                : 'translate(-50%, -50%) rotate(0deg)';
+        });
+    });
+
 
     let selectedPiece = null;
     chessBoardEl.addEventListener('click', (e) => {
