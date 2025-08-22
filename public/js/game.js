@@ -16,22 +16,20 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         const savedSettings = JSON.parse(localStorage.getItem('chessSettings')) || defaultSettings;
         
-        if (savedSettings.title) {
-            document.title = savedSettings.title + " - 房间";
-            const pageTitleHeader = document.getElementById('pageTitleHeader');
-            if (pageTitleHeader) pageTitleHeader.textContent = savedSettings.title;
-        } else {
-            document.title = defaultSettings.title + " - 房间";
-        }
+        const titleText = savedSettings.title || defaultSettings.title;
+        document.title = titleText + " - 房间";
+        const pageTitleHeader = document.getElementById('pageTitleHeader');
+        if (pageTitleHeader) pageTitleHeader.textContent = titleText;
 
-        document.documentElement.style.setProperty('--red-piece-text', savedSettings.redColor || defaultSettings.redColor);
-        document.documentElement.style.setProperty('--black-piece-text', savedSettings.blackColor || defaultSettings.blackColor);
-        document.documentElement.style.setProperty('--red-piece-bg', savedSettings.redBg || defaultSettings.redBg);
-        document.documentElement.style.setProperty('--black-piece-bg', savedSettings.blackBg || defaultSettings.blackBg);
-        document.documentElement.style.setProperty('--piece-border', savedSettings.pieceBorder || defaultSettings.pieceBorder);
-        document.documentElement.style.setProperty('--board-bg', savedSettings.boardBg || defaultSettings.boardBg);
-        document.documentElement.style.setProperty('--line-color', savedSettings.boardLine || defaultSettings.boardLine);
-        document.documentElement.style.setProperty('--border-color', savedSettings.boardBorder || defaultSettings.boardBorder);
+
+        document.documentElement.style.setProperty('--red-piece-text', savedSettings.redColor);
+        document.documentElement.style.setProperty('--black-piece-text', savedSettings.blackColor);
+        document.documentElement.style.setProperty('--red-piece-bg', savedSettings.redBg);
+        document.documentElement.style.setProperty('--black-piece-bg', savedSettings.blackBg);
+        document.documentElement.style.setProperty('--piece-border', savedSettings.pieceBorder);
+        document.documentElement.style.setProperty('--board-bg', savedSettings.boardBg);
+        document.documentElement.style.setProperty('--line-color', savedSettings.boardLine);
+        document.documentElement.style.setProperty('--border-color', savedSettings.boardBorder);
     }
 
     applyCustomSettings();
@@ -55,41 +53,72 @@ document.addEventListener('DOMContentLoaded', () => {
     const restartBtn = document.getElementById('restartBtn');
     const flipBoardBtn = document.getElementById('flipBoardBtn');
     const moveHistoryEl = document.getElementById('moveHistory');
+    
+    // 角色切换弹窗
+    const roleSwitchModal = document.getElementById('roleSwitchModal');
+    const switchToRedBtn = document.getElementById('switchToRedBtn');
+    const switchToBlackBtn = document.getElementById('switchToBlackBtn');
+    const switchToSpectatorBtn = document.getElementById('switchToSpectatorBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+
+
     let isBoardFlipped = false;
 
-    // --- 从 localStorage 获取用户名 ---
     let myUsername = localStorage.getItem('chessUsername');
     if (!myUsername) {
         myUsername = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
         localStorage.setItem('chessUsername', myUsername);
     }
 
-    // 加入房间
     socket.emit('joinRoom', { roomId, username: myUsername });
-
-
-    // --- SOCKET.IO 事件监听 ---
 
     socket.on('usernameUpdated', ({ newUsername }) => {
         myUsername = newUsername;
         localStorage.setItem('chessUsername', newUsername);
-        alert(`用户名已存在，您的用户名已更新为: ${myUsername}`);
+        alert(`用户名已存在，您的用户名已更新为: ${newUsername}`);
     });
 
     socket.on('roomInfo', ({ room, role, username }) => {
         myUsername = username;
         myRole = role;
         currentRoomState = room;
-        const me = room.players.find(p => p.username === myUsername);
-        myColor = me ? me.color : '';
+        const meAsPlayer = room.players.find(p => p.username === myUsername && p.id);
+        
+        if (meAsPlayer) {
+            myRole = 'player';
+            myColor = meAsPlayer.color;
+        } else {
+            myRole = 'spectator';
+            myColor = '';
+        }
 
-        updateRoomInfo(room, role);
+        updateRoomInfo(room, myRole);
         renderBoard(room.gameState.board, room.gameState.currentPlayer);
         updatePlayersList(room.players);
         updateSpectatorsList(room.spectators);
         updateMoveHistory(room.gameState.moveHistory);
+
+        // 如果我是观战者且有空位，显示角色选择弹窗
+        if (myRole === 'spectator' && room.players.filter(p => p.id).length < 2) {
+            updateAndShowRoleModal(room.players);
+        }
+    });
+    
+    socket.on('roleChanged', ({ newRole, color }) => {
+        myRole = newRole;
+        myColor = color;
+        roleSwitchModal.classList.remove('visible');
+        updateRoomInfo(currentRoomState, myRole);
     });
 
+    socket.on('gameStateUpdate', (gameState) => {
+        currentRoomState.gameState = gameState;
+        renderBoard(gameState.board, gameState.currentPlayer);
+        updateCapturedPieces(gameState.capturedPieces);
+        updateMoveHistory(gameState.moveHistory);
+    });
+    
+    // 其他 socket.on 事件监听...
     socket.on('chatHistory', (messages) => {
         chatMessagesEl.innerHTML = '';
         messages.reverse().forEach(msg => addMessageToBox(msg.username, msg.message, 'user'));
@@ -106,20 +135,18 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('playersListUpdate', (players) => {
         currentRoomState.players = players;
         updatePlayersList(players);
+        if (myRole === 'spectator' && players.filter(p => p.id).length < 2) {
+             updateAndShowRoleModal(players);
+        } else if (players.filter(p => p.id).length === 2) {
+            roleSwitchModal.classList.remove('visible');
+        }
     });
 
     socket.on('spectatorsListUpdate', (spectators) => {
         currentRoomState.spectators = spectators;
         updateSpectatorsList(spectators);
     });
-
-    socket.on('gameStateUpdate', (gameState) => {
-        currentRoomState.gameState = gameState;
-        renderBoard(gameState.board, gameState.currentPlayer);
-        updateCapturedPieces(gameState.capturedPieces);
-        updateMoveHistory(gameState.moveHistory);
-    });
-
+    
     socket.on('newMessage', ({ username, message }) => {
         addMessageToBox(username, message, 'user');
     });
@@ -132,32 +159,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('gameOver', ({ winner, reason }) => {
         let message = `游戏结束！${winner || '无人'} 获胜！`;
-        if (reason) {
-            message += ` (${reason})`;
-        }
-        setTimeout(() => {
-            alert(message);
-            if (myRole === 'player') {
-                restartBtn.style.display = 'inline-block';
-            }
-        }, 100);
+        if (reason) message += ` (${reason})`;
+        alert(message);
+        if (myRole === 'player') restartBtn.style.display = 'inline-block';
     });
-
+    
     socket.on('undoRequest', ({ from }) => {
-        const accepted = confirm(`${from} 请求悔棋，你是否同意？`);
-        socket.emit('undoResponse', { roomId, accepted });
+        if(confirm(`${from} 请求悔棋，你是否同意？`)) {
+            socket.emit('undoResponse', { roomId, accepted: true });
+        } else {
+            socket.emit('undoResponse', { roomId, accepted: false });
+        }
     });
 
     socket.on('systemMessage', ({ message }) => {
         addMessageToBox('系统', message, 'system');
     });
-
-    socket.on('restartRequest', ({ from }) => {
-        const accepted = confirm(`${from} 请求重新开始游戏，你是否同意？`);
-        socket.emit('restartResponse', { roomId, accepted });
+    
+     socket.on('restartRequest', ({ from }) => {
+        if(confirm(`${from} 请求重新开始游戏，你是否同意？`)) {
+            socket.emit('restartResponse', { roomId, accepted: true });
+        } else {
+            socket.emit('restartResponse', { roomId, accepted: false });
+        }
     });
 
-    // --- DOM 操作函数 ---
 
     function updateRoomInfo(room, role) {
         roomInfoEl.innerHTML = `
@@ -167,14 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    socket.on('roomStatusUpdate', ({ status }) => {
-        const statusEl = document.getElementById('roomStatusText');
-        if(statusEl) statusEl.textContent = status;
-        if (status === 'playing') {
-            restartBtn.style.display = 'none';
-        }
-    });
-
+    // ... renderBoard, getPieceSymbol, 等其他函数保持不变 ...
     function renderBoard(board, currentPlayer) {
         chessBoardEl.innerHTML = '';
         const isMyTurn = myColor === currentPlayer && myRole === 'player';
@@ -185,102 +204,81 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.className = 'board-cell';
                 cell.dataset.row = r;
                 cell.dataset.col = c;
-
                 const pieceData = board[r][c];
                 if (pieceData) {
                     const pieceEl = document.createElement('div');
                     pieceEl.className = `chess-piece ${pieceData.color}`;
-                    if (pieceData.color === myColor && isMyTurn) {
-                        pieceEl.classList.add('playable');
-                    }
+                    if (isMyTurn) pieceEl.classList.add('playable');
                     pieceEl.textContent = getPieceSymbol(pieceData);
                     pieceEl.dataset.row = r;
                     pieceEl.dataset.col = c;
-                    
-                    if(isBoardFlipped) {
-                        pieceEl.style.transform = 'translate(-50%, -50%) rotate(180deg)';
-                    }
-
+                    if(isBoardFlipped) pieceEl.style.transform = 'translate(-50%, -50%) rotate(180deg)';
                     cell.appendChild(pieceEl);
                 }
                 chessBoardEl.appendChild(cell);
             }
         }
-
         addBoardFeatures();
-
         const sidePanel = document.querySelector('.side-panel');
         sidePanel.classList.toggle('red-turn', currentPlayer === 'red');
         sidePanel.classList.toggle('black-turn', currentPlayer === 'black');
     }
 
     function addBoardFeatures() {
+        // ... (内容不变)
         const palaceTop = document.createElement('div');
         palaceTop.className = 'palace palace-top';
         chessBoardEl.appendChild(palaceTop);
-        
         const palaceBottom = document.createElement('div');
         palaceBottom.className = 'palace palace-bottom';
         chessBoardEl.appendChild(palaceBottom);
-        
         const chuHe = document.createElement('div');
         chuHe.className = 'river-text chu-he';
         chuHe.textContent = '楚 河';
         chessBoardEl.appendChild(chuHe);
-
         const hanJie = document.createElement('div');
         hanJie.className = 'river-text han-jie';
         hanJie.textContent = '漢 界';
         chessBoardEl.appendChild(hanJie);
     }
-
-
+    
     function getPieceSymbol(piece) {
+        // ... (内容不变)
         if (!piece) return '';
-        const symbols = {
-            'general': '将', 'advisor': '士', 'elephant': '象', 'horse': '馬', 'chariot': '車', 'cannon': '炮', 'soldier': '卒'
-        };
-        const redSymbols = {
-            'general': '帅', 'advisor': '仕', 'elephant': '相', 'horse': '馬', 'chariot': '車', 'cannon': '炮', 'soldier': '兵'
-        };
+        const symbols = { 'general': '将', 'advisor': '士', 'elephant': '象', 'horse': '馬', 'chariot': '車', 'cannon': '炮', 'soldier': '卒' };
+        const redSymbols = { 'general': '帅', 'advisor': '仕', 'elephant': '相', 'horse': '馬', 'chariot': '車', 'cannon': '炮', 'soldier': '兵' };
         return piece.color === 'red' ? redSymbols[piece.type] : symbols[piece.type];
     }
-
+    
     function updatePlayersList(players) {
+        // ... (内容不变)
         playersListEl.innerHTML = '';
         const blackPlayer = players.find(p => p.color === 'black');
         const redPlayer = players.find(p => p.color === 'red');
-        
         const redColor = getComputedStyle(document.documentElement).getPropertyValue('--red-piece-text');
         const blackColor = getComputedStyle(document.documentElement).getPropertyValue('--black-piece-text');
-
         const createColorSwatch = (color) => `<span style="display: inline-block; width: 14px; height: 14px; background-color: ${color}; border-radius: 50%; margin-right: 8px; vertical-align: middle;"></span>`;
-
         const blackLi = document.createElement('li');
         blackLi.innerHTML = `${createColorSwatch(blackColor)}黑方: ${blackPlayer ? `${blackPlayer.username} ${blackPlayer.id ? '' : '(离线)'}` : '(空位)'}`;
         if(blackPlayer && blackPlayer.username === myUsername) blackLi.style.fontWeight = 'bold';
         playersListEl.appendChild(blackLi);
-
         const redLi = document.createElement('li');
         redLi.innerHTML = `${createColorSwatch(redColor)}红方: ${redPlayer ? `${redPlayer.username} ${redPlayer.id ? '' : '(离线)'}` : '(空位)'}`;
         if(redPlayer && redPlayer.username === myUsername) redLi.style.fontWeight = 'bold';
         playersListEl.appendChild(redLi);
     }
     
-    // 新增：更新走棋记录
     function updateMoveHistory(history) {
+        // ... (内容不变)
         if (!history) return;
         moveHistoryEl.innerHTML = '';
         history.forEach((move, index) => {
             const moveItem = document.createElement('div');
             moveItem.className = 'move-history-item';
             const moveNumber = Math.floor(index / 2) + 1;
-            
             if (index % 2 === 0) {
-                // 红方
                 moveItem.innerHTML = `<span class="move-number">${moveNumber}.</span> <span class="move-text">${move}</span>`;
             } else {
-                // 黑方
                 const prevItem = moveHistoryEl.querySelector(`.move-history-item:last-child`);
                 if (prevItem && prevItem.children.length === 2) {
                      prevItem.innerHTML += `<span class="move-text" style="margin-left: 20px;">${move}</span>`;
@@ -293,8 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         moveHistoryEl.scrollTop = moveHistoryEl.scrollHeight;
     }
-
-
+    
+    // ... 其他辅助函数 ...
     function updateSpectatorsList(spectators) {
         spectatorsListEl.innerHTML = '';
         spectatorCountEl.textContent = spectators.length;
@@ -310,20 +308,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!captured) return;
         const redContainer = document.querySelector('#capturedForRed .pieces-container');
         const blackContainer = document.querySelector('#capturedForBlack .pieces-container');
-        
         redContainer.innerHTML = '';
         blackContainer.innerHTML = '';
-
         (captured.red || []).forEach(pieceType => {
             const pieceEl = document.createElement('div');
-            pieceEl.className = 'captured-piece black'; // 黑方吃红棋，所以显示黑棋
+            pieceEl.className = 'captured-piece black';
             pieceEl.textContent = getPieceSymbol({ type: pieceType, color: 'black' });
             redContainer.appendChild(pieceEl);
         });
-
         (captured.black || []).forEach(pieceType => {
             const pieceEl = document.createElement('div');
-            pieceEl.className = 'captured-piece red'; // 红方吃黑棋
+            pieceEl.className = 'captured-piece red';
             pieceEl.textContent = getPieceSymbol({ type: pieceType, color: 'red' });
             blackContainer.appendChild(pieceEl);
         });
@@ -347,87 +342,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearHighlights() {
-        document.querySelectorAll('.selected, .valid-move').forEach(el => {
-            el.classList.remove('selected', 'valid-move');
-        });
+        document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
     }
+    
+    // 角色选择弹窗逻辑
+    function updateAndShowRoleModal(players) {
+        const existingColors = players.filter(p=>p.id).map(p => p.color);
+        switchToRedBtn.disabled = existingColors.includes('red');
+        switchToBlackBtn.disabled = existingColors.includes('black');
+        roleSwitchModal.classList.add('visible');
+    }
+
+    switchToRedBtn.addEventListener('click', () => socket.emit('switchRole', { roomId, username: myUsername, desiredRole: 'red' }));
+    switchToBlackBtn.addEventListener('click', () => socket.emit('switchRole', { roomId, username: myUsername, desiredRole: 'black' }));
+    switchToSpectatorBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
+    closeModalBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
+
 
     // --- 事件绑定 ---
     sendMessageBtnEl.addEventListener('click', sendMessage);
-    messageInputEl.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-
-    undoBtn.addEventListener('click', () => {
-        socket.emit('requestUndo', { roomId });
-        addMessageToBox('系统', '已发送悔棋请求，等待对方同意...', 'system');
-    });
-    
-    restartBtn.addEventListener('click', () => {
-        socket.emit('requestRestart', { roomId });
-        addMessageToBox('系统', '已发送重新开始请求...', 'system');
-    });
-
+    messageInputEl.addEventListener('keypress', (e) => e.key === 'Enter' && sendMessage());
+    undoBtn.addEventListener('click', () => socket.emit('requestUndo', { roomId }));
+    restartBtn.addEventListener('click', () => socket.emit('requestRestart', { roomId }));
     flipBoardBtn.addEventListener('click', () => {
         isBoardFlipped = !isBoardFlipped;
-        chessBoardEl.style.transition = 'transform 0.5s ease-in-out';
         chessBoardEl.style.transform = isBoardFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
-
-        const pieces = chessBoardEl.querySelectorAll('.chess-piece');
-        pieces.forEach(piece => {
-            piece.style.transition = 'transform 0.5s ease-in-out';
-            piece.style.transform = isBoardFlipped 
-                ? 'translate(-50%, -50%) rotate(180deg)' 
-                : 'translate(-50%, -50%) rotate(0deg)';
-        });
+        chessBoardEl.querySelectorAll('.chess-piece').forEach(p => p.style.transform = isBoardFlipped ? 'translate(-50%, -50%) rotate(180deg)' : 'translate(-50%, -50%) rotate(0deg)');
     });
-
 
     let selectedPiece = null;
     chessBoardEl.addEventListener('click', (e) => {
         if (myRole !== 'player') return;
-
         const target = e.target.closest('.board-cell');
         if (!target) return;
-
-        const row = parseInt(target.dataset.row);
-        const col = parseInt(target.dataset.col);
-        
-        let boardRow = row;
-        let boardCol = col;
-
-        const pieceData = currentRoomState.gameState.board[boardRow][boardCol];
-
-        if (pieceData) { // 点击的位置有棋子
-            if (pieceData.color === myColor) {
-                if (selectedPiece && selectedPiece.row === boardRow && selectedPiece.col === boardCol) {
-                    selectedPiece = null;
-                    clearHighlights();
-                } else {
-                    selectedPiece = { row: boardRow, col: boardCol };
-                    clearHighlights();
-                    target.querySelector('.chess-piece').classList.add('selected');
-                }
-            } else if (selectedPiece) {
-                socket.emit('playerMove', {
-                    roomId,
-                    from: { row: selectedPiece.row, col: selectedPiece.col },
-                    to: { row: boardRow, col: boardCol }
-                });
-                selectedPiece = null;
-                clearHighlights();
-            }
-        } else if (selectedPiece) { 
-            socket.emit('playerMove', {
-                roomId,
-                from: { row: selectedPiece.row, col: selectedPiece.col },
-                to: { row: boardRow, col: boardCol }
-            });
+        const row = parseInt(target.dataset.row), col = parseInt(target.dataset.col);
+        const pieceData = currentRoomState.gameState.board[row][col];
+        if (pieceData && pieceData.color === myColor) {
+            selectedPiece = { row, col };
+            clearHighlights();
+            target.querySelector('.chess-piece').classList.add('selected');
+        } else if (selectedPiece) {
+            socket.emit('playerMove', { roomId, from: selectedPiece, to: { row, col } });
             selectedPiece = null;
             clearHighlights();
         }
     });
-
 
     addMessageToBox('系统', '欢迎来到象棋房间！', 'system');
 });
