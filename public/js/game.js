@@ -118,13 +118,12 @@ socket.on('gameOver', ({ winner, reason }) => {
     setTimeout(() => alert(message), 100); // 延迟确保棋盘渲染
 });
 
-
 // --- DOM 操作函数 ---
 
 function updateRoomInfo(room, role) {
     roomInfoEl.innerHTML = `
         <h2>${room.name}</h2>
-        <p>状态: <span class="status-text">${room.status}</span></p>
+        <p>状态: <span id="roomStatusText" class="status-text">${room.status}</span></p>
         <p>您的身份: ${role === 'player' ? '玩家' : '观战者'} (${myUsername})</p>
     `;
     const switchBtn = document.createElement('button');
@@ -135,18 +134,24 @@ function updateRoomInfo(room, role) {
 
     switchBtn.addEventListener('click', openRoleSwitchModal);
 }
+socket.on('roomStatusUpdate', ({ status }) => {
+    const statusEl = document.getElementById('roomStatusText');
+    if(statusEl) statusEl.textContent = status;
+});
 
 function renderBoard(board, currentPlayer) {
-    chessBoardEl.innerHTML = '';
+    chessBoardEl.innerHTML = ''; // 清空棋盘
     const isMyTurn = myColor === currentPlayer;
 
+    // 创建 10x9 的网格单元
     for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 9; c++) {
             const cell = document.createElement('div');
             cell.className = 'board-cell';
             cell.dataset.row = r;
             cell.dataset.col = c;
-
+            
+            // 在单元格上放置棋子
             const pieceData = board[r][c];
             if (pieceData) {
                 const pieceEl = document.createElement('div');
@@ -162,6 +167,8 @@ function renderBoard(board, currentPlayer) {
             chessBoardEl.appendChild(cell);
         }
     }
+    
+    // 添加九宫格和楚河汉界文字
     addBoardFeatures();
     
     // 更新回合提示
@@ -170,9 +177,8 @@ function renderBoard(board, currentPlayer) {
     sidePanel.classList.toggle('black-turn', currentPlayer === 'black');
 }
 
-
 function addBoardFeatures() {
-    // 添加九宫斜线
+    // 九宫
     const palaceTop = document.createElement('div');
     palaceTop.className = 'palace palace-top';
     chessBoardEl.appendChild(palaceTop);
@@ -180,6 +186,17 @@ function addBoardFeatures() {
     const palaceBottom = document.createElement('div');
     palaceBottom.className = 'palace palace-bottom';
     chessBoardEl.appendChild(palaceBottom);
+    
+    // 楚河汉界文字
+    const chuHe = document.createElement('div');
+    chuHe.className = 'river-text chu-he';
+    chuHe.textContent = '楚 河';
+    chessBoardEl.appendChild(chuHe);
+
+    const hanJie = document.createElement('div');
+    hanJie.className = 'river-text han-jie';
+    hanJie.textContent = '漢 界';
+    chessBoardEl.appendChild(hanJie);
 }
 
 function getPieceSymbol(piece) {
@@ -203,12 +220,12 @@ function updatePlayersList(players) {
     const redPlayer = players.find(p => p.color === 'red');
 
     const blackLi = document.createElement('li');
-    blackLi.textContent = `黑方: ${blackPlayer ? blackPlayer.username : '(空位)'}`;
+    blackLi.innerHTML = `黑方: ${blackPlayer ? `${blackPlayer.username} ${blackPlayer.id ? '' : '(离线)'}` : '(空位)'}`;
     if(blackPlayer && blackPlayer.username === myUsername) blackLi.style.fontWeight = 'bold';
     playersListEl.appendChild(blackLi);
 
     const redLi = document.createElement('li');
-    redLi.textContent = `红方: ${redPlayer ? redPlayer.username : '(空位)'}`;
+    redLi.innerHTML = `红方: ${redPlayer ? `${redPlayer.username} ${redPlayer.id ? '' : '(离线)'}` : '(空位)'}`;
     if(redPlayer && redPlayer.username === myUsername) redLi.style.fontWeight = 'bold';
     playersListEl.appendChild(redLi);
 }
@@ -250,12 +267,12 @@ function clearHighlights() {
 
 // --- 角色切换模态框逻辑 ---
 function openRoleSwitchModal() {
-    // 根据当前房间状态，禁用/启用按钮
-    const isRedOccupied = currentRoomState.players.some(p => p.color === 'red');
-    const isBlackOccupied = currentRoomState.players.some(p => p.color === 'black');
+    const onlinePlayers = currentRoomState.players.filter(p => p.id);
+    const isRedOccupied = onlinePlayers.some(p => p.color === 'red');
+    const isBlackOccupied = onlinePlayers.some(p => p.color === 'black');
     
-    switchToRedBtn.disabled = myColor === 'red';
-    switchToBlackBtn.disabled = myColor === 'black';
+    switchToRedBtn.disabled = myColor === 'red' || isRedOccupied;
+    switchToBlackBtn.disabled = myColor === 'black' || isBlackOccupied;
     switchToSpectatorBtn.disabled = myRole === 'spectator';
     
     roleSwitchModal.classList.add('visible');
@@ -271,16 +288,16 @@ let selectedPiece = null;
 chessBoardEl.addEventListener('click', (e) => {
     if (myRole !== 'player') return;
 
-    const target = e.target.closest('.chess-piece, .board-cell');
+    const target = e.target.closest('.board-cell');
     if (!target) return;
 
     const row = parseInt(target.dataset.row);
     const col = parseInt(target.dataset.col);
 
-    const pieceEl = target.closest('.chess-piece');
+    const pieceEl = target.querySelector('.chess-piece');
 
     if (pieceEl) {
-        // 点击的是棋子
+        // 点击的是有棋子的位置
         const pieceColor = pieceEl.classList.contains('red') ? 'red' : 'black';
         if (pieceColor === myColor) {
             // 是自己的棋子，选中它

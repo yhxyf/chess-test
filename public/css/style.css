@@ -12,6 +12,11 @@
     --text-color: #333;
     --primary-color: #0984e3;
     --primary-hover-color: #0060ac;
+    
+    /* 棋盘尺寸变量 */
+    --cell-size: 60px;
+    --board-width: calc(var(--cell-size) * 8);
+    --board-height: calc(var(--cell-size) * 9);
 }
 
 * {
@@ -127,10 +132,10 @@ h1 {
     align-items: flex-start;
 }
 .board-container {
-    flex: 0 0 540px;
+    flex-shrink: 0;
 }
 .side-panel {
-    flex: 1;
+    flex-grow: 1;
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -142,83 +147,111 @@ h1 {
     box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
-/* 棋盘和棋子 */
+/* 棋盘布局 */
 .chess-board {
-    width: 540px;
-    height: 600px;
+    width: calc(var(--board-width) + var(--cell-size));
+    height: calc(var(--board-height) + var(--cell-size));
     background-color: var(--board-bg);
     border: 3px solid var(--border-color);
     position: relative;
+    padding: calc(var(--cell-size) / 2);
+    box-sizing: content-box;
     display: grid;
-    grid-template-columns: repeat(9, 1fr);
-    grid-template-rows: repeat(10, 1fr);
+    grid-template-columns: repeat(9, var(--cell-size));
+    grid-template-rows: repeat(10, var(--cell-size));
     box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     border-radius: 5px;
     background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
 }
+
 .board-cell {
+    width: var(--cell-size);
+    height: var(--cell-size);
     position: relative;
-    border-right: 1px solid var(--line-color);
-    border-bottom: 1px solid var(--line-color);
-}
-/* 移除边缘线 */
-.board-cell:nth-child(9n) { border-right: none; }
-.board-cell:nth-child(n+82) { border-bottom: none; }
-/* 移除楚河汉界中间的线 */
-.board-cell:nth-child(n+46):nth-child(-n+54) { border-bottom: none; }
-
-
-/* 楚河汉界 */
-.chess-board::before {
-    content: "楚 河";
-    position: absolute;
-    top: 50%;
-    left: 20%;
-    transform: translateY(-50%);
-    font-size: 28px;
-    letter-spacing: 20px;
-    color: var(--line-color);
-    pointer-events: none;
-}
-.chess-board::after {
-    content: "漢 界";
-    position: absolute;
-    top: 50%;
-    right: 20%;
-    transform: translateY(-50%);
-    font-size: 28px;
-    letter-spacing: 20px;
-    color: var(--line-color);
-    pointer-events: none;
+    box-sizing: border-box;
 }
 
-/* 九宫斜线 */
-.palace {
-    position: absolute;
-    width: calc(100% / 9 * 2);
-    height: calc(100% / 10 * 2);
-    left: calc(100% / 9 * 3);
-    pointer-events: none;
-}
-.palace-top { top: 0; }
-.palace-bottom { bottom: 0; }
-.palace::before, .palace::after {
+/* 绘制棋盘线条 */
+.board-cell::before, .board-cell::after {
     content: '';
     position: absolute;
     background-color: var(--line-color);
-    width: 1px;
-    height: 141.4%; /* sqrt(2) */
-    top: -20.7%;
+    z-index: 1;
 }
-.palace::before {
-    left: 50%;
-    transform: rotate(45deg);
+.board-cell::before { /* 水平线 */
+    width: 100%; height: 1px;
+    top: 50%; left: 0;
+    transform: translateY(-0.5px);
 }
-.palace::after {
-    right: 50%;
-    transform: rotate(-45deg);
+.board-cell::after { /* 垂直线 */
+    width: 1px; height: 100%;
+    top: 0; left: 50%;
+    transform: translateX(-0.5px);
 }
 
+/* 修正棋盘边缘线条 */
+.board-cell[data-col='0']::before { left: 50%; width: 50%; }
+.board-cell[data-col='8']::before { width: 50%; }
+.board-cell[data-row='0']::after { top: 50%; height: 50%; }
+.board-cell[data-row='9']::after { height: 50%; }
+.board-cell[data-row='4']::after { height: 50%; }
+.board-cell[data-row='5']::after { top: 50%; height: 50%; }
+
+/* --- 楚河汉界文字对齐修正 START --- */
+.chess-board > .river-text {
+    position: absolute;
+    width: calc(var(--cell-size) * 4);
+    text-align: center;
+    top: calc(var(--cell-size) * 4.5); /* 定位到河界中线 */
+    transform: translateY(-50%);
+    font-size: calc(var(--cell-size) * 0.5);
+    letter-spacing: var(--cell-size);
+    color: var(--line-color);
+    pointer-events: none;
+    z-index: 2;
+}
+.river-text.chu-he {
+    left: calc(var(--cell-size) * 0.5);
+    padding-right: var(--cell-size); /* 补偿 letter-spacing */
+}
+.river-text.han-jie {
+    right: calc(var(--cell-size) * 0.5);
+    padding-left: var(--cell-size); /* 补偿 letter-spacing */
+}
+/* --- 楚河汉界文字对齐修正 END --- */
+
+/* --- 九宫斜线对齐修正 START --- */
+.palace {
+    position: absolute;
+    width: calc(var(--cell-size) * 2);
+    height: calc(var(--cell-size) * 2);
+    left: calc(var(--cell-size) * 3 + var(--cell-size)/2); /* 移动到九宫格区域 */
+    pointer-events: none;
+    z-index: 2;
+}
+.palace-top { top: calc(var(--cell-size) / 2); }
+.palace-bottom { bottom: calc(var(--cell-size) / 2); }
+
+.palace::before, .palace::after {
+    content: '';
+    position: absolute;
+    width: 1px;
+    height: 141.42%; /* sqrt(2) * 100% */
+    background-color: var(--line-color);
+    left: 50%;
+    top: 50%;
+}
+.palace::before {
+    transform-origin: center;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+.palace::after {
+    transform-origin: center;
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+/* --- 九宫斜线对齐修正 END --- */
+
+/* 棋子样式 */
 .chess-piece {
     width: 52px;
     height: 52px;
@@ -243,7 +276,6 @@ h1 {
     color: var(--red-piece-text);
     border: 2px solid var(--red-piece-text);
 }
-
 .chess-piece.black {
     background: radial-gradient(circle at 30% 30%, #f0f0f0, #e0e0e0);
     color: var(--black-piece-text);
@@ -253,7 +285,6 @@ h1 {
     box-shadow: 0 0 0 4px var(--selected-glow), inset 0 -3px 5px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.4);
     transform: translate(-50%, -50%) scale(1.08);
 }
-
 /* 聊天窗口 */
 .chat-container h3 { margin-bottom: 10px; }
 .chat-messages {
