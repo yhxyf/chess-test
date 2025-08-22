@@ -200,23 +200,20 @@ h1 {
 /* --- 楚河汉界文字对齐修正 START --- */
 .chess-board > .river-text {
     position: absolute;
-    width: calc(var(--cell-size) * 4);
+    display: inline-block;
+    width: auto;
     text-align: center;
-    top: calc(var(--cell-size) * 4.5); /* 定位到河界中线 */
-    transform: translateY(-50%);
+    top: calc(var(--cell-size) * 5.1); /* 向下移动一点 */
     font-size: calc(var(--cell-size) * 0.5);
-    letter-spacing: var(--cell-size);
     color: var(--line-color);
     pointer-events: none;
     z-index: 2;
 }
 .river-text.chu-he {
-    left: calc(var(--cell-size) * 0.5);
-    padding-right: var(--cell-size); /* 补偿 letter-spacing */
+    left: calc(var(--cell-size) * 1.5);
 }
 .river-text.han-jie {
-    right: calc(var(--cell-size) * 0.5);
-    padding-left: var(--cell-size); /* 补偿 letter-spacing */
+    right: calc(var(--cell-size) * 1.5);
 }
 /* --- 楚河汉界文字对齐修正 END --- */
 
