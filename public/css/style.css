@@ -3,11 +3,15 @@
     --board-bg: #e6c5a1;
     --border-color: #8b5a2b;
     --line-color: #6b4724;
-    --red-piece-bg: #ff7675;
-    --red-piece-border: #d63031;
-    --black-piece-bg: #576574;
-    --black-piece-border: #2d3436;
-    --selected-glow: #0984e3;
+    --red-piece-text: #c0392b;
+    --black-piece-text: #2c3e50;
+    --selected-glow: rgba(9, 132, 227, 0.8);
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --bg-color: #f0f2f5;
+    --container-bg: #ffffff;
+    --text-color: #333;
+    --primary-color: #0984e3;
+    --primary-hover-color: #0060ac;
 }
 
 * {
@@ -17,9 +21,9 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background-color: #f0f2f5;
-    color: #333;
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -29,75 +33,94 @@ body {
 
 .container {
     width: 100%;
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
 header {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
+    padding: 10px;
 }
 
-h1, h2, h3 {
+h1 {
+    font-size: 2.5em;
     color: #2c3e50;
+    font-weight: 600;
+}
+.subtitle {
+    color: #777;
+    font-size: 1.1em;
 }
 
 /* 按钮样式 */
 .btn {
     display: inline-block;
-    padding: 8px 16px;
+    padding: 10px 20px;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     cursor: pointer;
     text-decoration: none;
-    font-size: 14px;
-    transition: all 0.2s;
-    background-color: #3498db;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+    background-color: var(--primary-color);
     color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 .btn:hover {
-    background-color: #2980b9;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    background-color: var(--primary-hover-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
 /* 大厅页面 */
 .room-section {
-    background: white;
-    padding: 25px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    background: var(--container-bg);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 .room-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 15px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
 }
+.room-header h2 { font-size: 1.8em; }
+
+#roomList { list-style: none; }
 #roomList li {
-    padding: 15px;
+    padding: 15px 20px;
     border: 1px solid #e0e0e0;
-    border-radius: 5px;
-    margin-bottom: 10px;
+    border-radius: 8px;
+    margin-bottom: 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease-in-out;
 }
 #roomList li:hover {
     background-color: #f9f9f9;
+    border-color: var(--primary-color);
+    transform: translateX(5px);
 }
+.room-name { font-weight: 600; font-size: 1.1em; color: #333; }
+.room-status { font-size: 0.9em; padding: 4px 8px; border-radius: 4px; color: white; }
+.status-waiting { background-color: #2ecc71; }
+.status-playing { background-color: #e67e22; }
+.status-finished { background-color: #95a5a6; }
 
-/* 房间页面 */
+/* 游戏页面 */
 .game-container {
     display: flex;
     gap: 30px;
     align-items: flex-start;
 }
 .board-container {
-    flex: 0 0 540px; /* 固定棋盘容器宽度 */
+    flex: 0 0 540px;
 }
 .side-panel {
     flex: 1;
@@ -106,102 +129,39 @@ h1, h2, h3 {
     gap: 20px;
 }
 .players-info, .spectators-info, .chat-container {
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    background: var(--container-bg);
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
-/* 棋盘和棋子样式 */
+/* 棋盘和棋子 */
 .chess-board {
     width: 540px;
     height: 600px;
     background-color: var(--board-bg);
     border: 3px solid var(--border-color);
     position: relative;
-    display: grid;
-    grid-template-columns: repeat(9, 1fr);
-    grid-template-rows: repeat(10, 1fr);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    border-radius: 5px;
+    background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
 }
+
 .board-cell {
-    position: relative;
-    border-right: 1px solid var(--line-color);
-    border-bottom: 1px solid var(--line-color);
-}
-/* 移除边缘线 */
-.board-cell:nth-child(9n) { border-right: none; }
-.board-cell:nth-child(n+82) { border-bottom: none; }
-/* 移除楚河汉界中间的线 */
-.board-cell:nth-child(10n - 6), .board-cell:nth-child(10n - 5),
-.board-cell:nth-child(10n - 4), .board-cell:nth-child(10n - 3),
-.board-cell:nth-child(10n - 2), .board-cell:nth-child(10n - 1),
-.board-cell:nth-child(10n) {
-    border-bottom: none;
-}
-.board-cell:nth-child(5n):not(:nth-child(9n)):not(:nth-child(10n)) {
-    border-bottom: 1px solid var(--line-color);
-}
-.board-cell:nth-child(n+37):nth-child(-n+45) {
-    border-bottom: none;
-}
-
-
-/* 楚河汉界 */
-.chess-board::before {
-    content: "楚河";
     position: absolute;
-    top: 50%;
-    left: 15%;
-    transform: translateY(-50%);
-    font-size: 28px;
-    color: var(--line-color);
-}
-.chess-board::after {
-    content: "漢界";
-    position: absolute;
-    top: 50%;
-    right: 15%;
-    transform: translateY(-50%);
-    font-size: 28px;
-    color: var(--line-color);
-}
-
-/* 九宫斜线 */
-.palace {
-    position: absolute;
-    width: calc(100% / 9 * 2);
-    height: calc(100% / 10 * 2);
-    left: calc(100% / 9 * 3);
-    pointer-events: none;
-}
-.palace-top { top: 0; }
-.palace-bottom { bottom: 0; }
-.palace::before, .palace::after {
-    content: '';
-    position: absolute;
-    background-color: var(--line-color);
-    width: 1px;
-    height: 141.4%; /* sqrt(2) */
-    top: -20.7%;
-}
-.palace::before {
-    left: 50%;
-    transform: rotate(45deg);
-}
-.palace::after {
-    right: 50%;
-    transform: rotate(-45deg);
+    width: 60px; /* 540 / 9 */
+    height: 60px; /* 600 / 10 */
+    box-sizing: border-box;
 }
 
 .chess-piece {
-    width: 85%;
-    height: 85%;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 28px;
+    font-size: 30px;
     font-weight: bold;
     cursor: pointer;
     position: absolute;
@@ -210,70 +170,60 @@ h1, h2, h3 {
     transform: translate(-50%, -50%);
     z-index: 10;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-    transition: all 0.2s;
+    transition: all 0.15s ease-in-out;
+    box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.4);
 }
-
 .chess-piece.red {
-    background: radial-gradient(circle at 30% 30%, #ff9a9e, #fecfef);
-    color: #c0392b;
-    border: 2px solid #c0392b;
+    background: radial-gradient(circle at 30% 30%, #ffdddd, #ffcccc);
+    color: var(--red-piece-text);
+    border: 2px solid var(--red-piece-text);
 }
 
 .chess-piece.black {
-    background: radial-gradient(circle at 30% 30%, #a2b2c1, #dfe6e9);
-    color: #2c3e50;
-    border: 2px solid #2c3e50;
+    background: radial-gradient(circle at 30% 30%, #f0f0f0, #e0e0e0);
+    color: var(--black-piece-text);
+    border: 2px solid var(--black-piece-text);
 }
-
 .chess-piece.selected {
-    box-shadow: 0 0 0 4px var(--selected-glow);
-    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 0 0 4px var(--selected-glow), inset 0 -3px 5px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.4);
+    transform: translate(-50%, -50%) scale(1.08);
 }
 
 /* 聊天窗口 */
+.chat-container h3 { margin-bottom: 10px; }
 .chat-messages {
     height: 250px;
     overflow-y: auto;
     border: 1px solid #ddd;
     padding: 10px;
     margin-bottom: 10px;
-    background-color: #fdfdfd;
+    background-color: #f9f9f9;
+    border-radius: 5px;
 }
-.chat-message.system { color: #95a5a6; font-style: italic; }
-.chat-input { display: flex; gap: 5px; }
-.chat-input input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }
+.chat-message { margin-bottom: 8px; }
+.chat-message.system { color: #95a5a6; font-style: italic; font-size: 0.9em; }
+.chat-input { display: flex; gap: 10px; }
+.chat-input input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+}
+.chat-input button {
+    padding: 10px 15px;
+    font-size: 14px;
+}
 
 /* 回合提示 */
-.players-info {
-    border: 2px solid transparent;
-    transition: border-color 0.5s;
+.players-info ul { list-style: none; }
+.players-info li {
+    padding: 8px;
+    border-radius: 5px;
+    transition: all 0.3s;
 }
-.red-turn .players-info li:contains('红方') {
-    background-color: rgba(255, 118, 117, 0.2);
+.side-panel.red-turn .players-info li:first-child,
+.side-panel.black-turn .players-info li:last-child {
+    background-color: rgba(9, 132, 227, 0.15);
     font-weight: bold;
-}
-.black-turn .players-info li:contains('黑方') {
-    background-color: rgba(87, 101, 116, 0.2);
-    font-weight: bold;
-}
-
-@media (max-width: 900px) {
-    body {
-        padding: 10px;
-        align-items: flex-start;
-    }
-    .game-container {
-        flex-direction: column;
-    }
-    .board-container {
-        flex: none;
-        width: 100%;
-        max-width: 540px;
-        margin: 0 auto;
-    }
-    .chess-board {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 9/10;
-    }
 }
