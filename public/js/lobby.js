@@ -40,33 +40,107 @@ document.addEventListener('DOMContentLoaded', () => {
     const createRoomBtn = document.getElementById('createRoomBtn');
     const roomListEl = document.getElementById('roomList');
     const noRoomsMessage = document.getElementById('noRoomsMessage');
+    const authButtons = document.getElementById('authButtons');
+    const userActions = document.getElementById('userActions');
+    const usernameDisplay = document.getElementById('usernameDisplay');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const guestModeBtn = document.getElementById('guestModeBtn');
+
+    let currentUser = null;
+
+    // 检查登录状态
+    fetch('/api/check-auth')
+        .then(res => res.json())
+        .then(data => {
+            if (data.loggedIn) {
+                currentUser = data.username;
+                localStorage.setItem('chessUsername', currentUser);
+                localStorage.removeItem('chessGuestName'); // 清除游客名
+                updateUIForLoggedInUser();
+            } else {
+                updateUIForLoggedOutUser();
+            }
+        });
+
+    function updateUIForLoggedInUser() {
+        authButtons.style.display = 'none';
+        userActions.style.display = 'inline-block';
+        usernameDisplay.textContent = `欢迎, ${currentUser}`;
+        guestModeBtn.style.display = 'none';
+    }
+
+    function updateUIForLoggedOutUser() {
+        authButtons.style.display = 'inline-block';
+        userActions.style.display = 'none';
+        guestModeBtn.style.display = 'inline-block';
+    }
+    
+    logoutBtn.addEventListener('click', () => {
+        fetch('/api/logout', { method: 'POST' })
+            .then(() => {
+                currentUser = null;
+                localStorage.removeItem('chessUsername');
+                updateUIForLoggedOutUser();
+            });
+    });
+
+    guestModeBtn.addEventListener('click', () => {
+        let guestName = localStorage.getItem('chessGuestName');
+        if (!guestName) {
+            guestName = prompt('请输入您的游客昵称:', '游客' + Math.floor(Math.random() * 1000));
+            if(guestName) {
+                localStorage.setItem('chessGuestName', guestName);
+                 alert(`欢迎，游客 ${guestName}！现在您可以创建或加入房间了。`);
+            }
+        } else {
+            alert(`您当前以游客 ${guestName} 的身份活动。`);
+        }
+    });
+
 
     function generateRoomId() {
         return Math.random().toString(36).substring(2, 10).toUpperCase();
     }
 
-    createRoomBtn.addEventListener('click', () => {
-        const roomId = generateRoomId();
-        let username = localStorage.getItem('chessUsername');
-        if (!username) {
-            username = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
-            localStorage.setItem('chessUsername', username);
+    function getUsername(isCreating) {
+        if (currentUser) {
+            return currentUser;
         }
+        let guestName = localStorage.getItem('chessGuestName');
+        if (guestName) {
+            return guestName;
+        }
+        // 如果是创建房间，必须有名字
+        if (isCreating) {
+             guestName = prompt('作为游客，请输入一个昵称来创建房间:', '游客' + Math.floor(Math.random() * 1000));
+             if(guestName) localStorage.setItem('chessGuestName', guestName);
+             return guestName;
+        }
+        // 如果是加入房间，可以在房间页面再输入
+        return null;
+    }
+
+    createRoomBtn.addEventListener('click', () => {
+        const username = getUsername(true);
+        if (!username) {
+             alert('您需要一个昵称才能创建房间。');
+             return;
+        }
+
+        const roomId = generateRoomId();
         const roomName = prompt('请输入房间名称:', `${username}的房间`);
         
         if (roomName) {
-            // 在这里我们不直接跳转，而是通知服务器创建房间
-            // 服务器创建成功后，可以通过一个回调或者事件来跳转
-            // 为了简单起见，我们还是直接跳转，服务器端处理房间的创建
             window.location.href = `/room/${roomId}?name=${encodeURIComponent(roomName)}`;
         }
     });
 
     window.joinRoom = function(roomId) {
-        let username = localStorage.getItem('chessUsername');
-        if (!username) {
-            username = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
-            localStorage.setItem('chessUsername', username);
+        const username = getUsername(false);
+         if (!username && !currentUser) {
+            alert('请先登录或进入游客模式以加入房间。');
+            guestModeBtn.style.border = '2px solid red'; // 提示用户
+            return;
         }
         window.location.href = `/room/${roomId}`;
     }

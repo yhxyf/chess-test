@@ -1,6 +1,31 @@
 const db = require('./init');
 
 class DatabaseManager {
+  // 添加用户 (注册)
+  static addUser(username, hashedPassword) {
+    try {
+      const stmt = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)');
+      const info = stmt.run(username, hashedPassword);
+      return { success: true, id: info.lastInsertRowid };
+    } catch (error) {
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return { success: false, message: '用户名已存在' };
+      }
+      console.error('添加用户失败:', error);
+      return { success: false, message: '数据库错误' };
+    }
+  }
+
+  // 获取用户 (登录)
+  static getUser(username) {
+    try {
+      return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    } catch (error) {
+      console.error('获取用户信息失败:', error);
+      return null;
+    }
+  }
+
   // 创建房间
   static createRoom(roomId, roomName) {
     try {

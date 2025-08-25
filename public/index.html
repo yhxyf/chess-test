@@ -18,8 +18,17 @@
                 <div class="room-header">
                     <h2>游戏大厅</h2>
                     <div>
-                        <a href="/settings.html" class="btn" style="margin-right: 10px; background-color: #777;">设置</a>
-                        <button id="createRoomBtn" class="btn">创建房间</button>
+                        <div id="authButtons" style="display: inline-block;">
+                            <a href="/login.html" class="btn">登录</a>
+                            <a href="/register.html" class="btn">注册</a>
+                        </div>
+                        <div id="userActions" style="display: none; align-items: center;">
+                            <span id="usernameDisplay" style="margin-right: 15px;"></span>
+                            <button id="logoutBtn" class="btn" style="background-color: #c0392b;">退出登录</button>
+                        </div>
+                         <a href="/settings.html" class="btn" style="margin: 0 10px; background-color: #777;">设置</a>
+                         <button id="guestModeBtn" class="btn" style="background-color: #27ae60;">游客模式</button>
+                         <button id="createRoomBtn" class="btn">创建房间</button>
                     </div>
                 </div>
                 

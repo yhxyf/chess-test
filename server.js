@@ -2,6 +2,9 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const DatabaseManager = require('./database/DatabaseManager');
 const { isValidMove, isCheck, isCheckmate } = require('./game_logic/chessRules');
 
@@ -9,18 +12,83 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+const JWT_SECRET = 'your_super_secret_key_change_me'; // 请务必修改为一个更安全的密钥
+
+// 中间件
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json()); // 用于解析 JSON 请求体
+app.use(cookieParser());
 
 // 内存中的房间缓存
 const rooms = {};
 
-// 路由
+// --- API 路由 ---
+
+// 注册
+app.post('/api/register', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ message: '用户名和密码不能为空' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = DatabaseManager.addUser(username, hashedPassword);
+    if (result.success) {
+        res.status(201).json({ message: '注册成功' });
+    } else {
+        res.status(409).json({ message: result.message });
+    }
+});
+
+// 登录
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
+    const user = DatabaseManager.getUser(username);
+
+    if (user && await bcrypt.compare(password, user.password)) {
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1d' });
+        res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+        res.json({ message: '登录成功' });
+    } else {
+        res.status(401).json({ message: '用户名或密码错误' });
+    }
+});
+
+// 检查登录状态
+app.get('/api/check-auth', (req, res) => {
+    const token = req.cookies.token;
+    if (!token) {
+        return res.json({ loggedIn: false });
+    }
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        res.json({ loggedIn: true, username: decoded.username });
+    } catch (err) {
+        res.json({ loggedIn: false });
+    }
+});
+
+// 退出登录
+app.post('/api/logout', (req, res) => {
+    res.clearCookie('token');
+    res.json({ message: '退出成功' });
+});
+
+
+// --- 页面路由 ---
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/room/:roomId', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
+});
+
+app.get('/login.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/register.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
 app.get('/settings.html', (req, res) => {

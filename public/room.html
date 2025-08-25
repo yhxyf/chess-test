@@ -8,11 +8,12 @@
 </head>
 <body>
     <div class="container">
-        <header>
+        <header style="position: relative;">
             <h1 id="pageTitleHeader">实时网页象棋</h1>
             <div id="roomInfo">
             </div>
             <a href="/" class="btn" style="position: absolute; top: 20px; left: 20px;">返回主页</a>
+            <button id="logoutBtnRoom" class="btn" style="position: absolute; top: 20px; right: 20px; background-color: #c0392b; display: none;">退出登录</button>
         </header>
         
         <main>
@@ -82,5 +83,23 @@
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/game.js"></script>
+    <script>
+        // 房间页面的简单退出逻辑
+        document.addEventListener('DOMContentLoaded', () => {
+            const logoutBtnRoom = document.getElementById('logoutBtnRoom');
+            fetch('/api/check-auth').then(res => res.json()).then(data => {
+                if(data.loggedIn) {
+                    logoutBtnRoom.style.display = 'block';
+                }
+            });
+            logoutBtnRoom.addEventListener('click', () => {
+                fetch('/api/logout', { method: 'POST' })
+                    .then(() => {
+                        localStorage.removeItem('chessUsername');
+                        window.location.href = '/';
+                    });
+            });
+        });
+    </script>
 </body>
 </html>

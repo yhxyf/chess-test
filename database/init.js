@@ -11,6 +11,16 @@ if (!fs.existsSync(dataDir)) {
 // 连接到数据库（如果数据库不存在会自动创建）
 const db = new Database(path.join(dataDir, 'chess.db'));
 
+// 创建用户表
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
 // 创建房间表
 db.exec(`
   CREATE TABLE IF NOT EXISTS rooms (

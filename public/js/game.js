@@ -63,14 +63,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     let isBoardFlipped = false;
+    let myUsername = localStorage.getItem('chessUsername'); // 尝试从已登录用户获取
+    
+    // 检查登录状态
+    fetch('/api/check-auth')
+        .then(res => res.json())
+        .then(data => {
+            if (data.loggedIn) {
+                myUsername = data.username;
+                localStorage.setItem('chessUsername', myUsername);
+            } else {
+                // 如果未登录，检查本地游客名
+                myUsername = localStorage.getItem('chessGuestName');
+                if (!myUsername) {
+                     // 如果都没有，则视为新游客，在加入房间时处理
+                     myUsername = null;
+                }
+            }
+            // 确保有用户名才加入房间
+            if (myUsername) {
+                socket.emit('joinRoom', { roomId, username: myUsername });
+            } else {
+                // 新游客, 提示输入
+                const guestName = prompt('请输入您的游客昵称:', '游客' + Math.floor(Math.random() * 1000));
+                if (guestName) {
+                    myUsername = guestName;
+                    localStorage.setItem('chessGuestName', myUsername);
+                    socket.emit('joinRoom', { roomId, username: myUsername });
+                } else {
+                    // 如果取消输入，则返回主页
+                    window.location.href = '/';
+                }
+            }
+        });
 
-    let myUsername = localStorage.getItem('chessUsername');
-    if (!myUsername) {
-        myUsername = prompt('请输入您的用户名:') || '游客' + Math.floor(Math.random() * 1000);
-        localStorage.setItem('chessUsername', myUsername);
-    }
-
-    socket.emit('joinRoom', { roomId, username: myUsername });
 
     socket.on('usernameUpdated', ({ newUsername }) => {
         myUsername = newUsername;
@@ -87,6 +113,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (meAsPlayer) {
             myRole = 'player';
             myColor = meAsPlayer.color;
+            // *** 新增：如果是黑方，自动翻转棋盘 ***
+            if (myColor === 'black' && !isBoardFlipped) {
+                isBoardFlipped = true;
+                flipBoard();
+            }
         } else {
             myRole = 'spectator';
             myColor = '';
@@ -110,6 +141,14 @@ document.addEventListener('DOMContentLoaded', () => {
         myColor = color;
         roleSwitchModal.classList.remove('visible');
         updateRoomInfo(currentRoomState, myRole);
+         // *** 新增：成为黑方后，自动翻转棋盘 ***
+        if (myColor === 'black' && !isBoardFlipped) {
+            isBoardFlipped = true;
+            flipBoard();
+        } else if (myColor === 'red' && isBoardFlipped) {
+            isBoardFlipped = false;
+            flipBoard();
+        }
     });
 
     socket.on('gameStateUpdate', (gameState) => {
@@ -227,13 +266,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     pieceEl.textContent = getPieceSymbol(pieceData);
                     pieceEl.dataset.row = r;
                     pieceEl.dataset.col = c;
-                    if(isBoardFlipped) pieceEl.style.transform = 'translate(-50%, -50%) rotate(180deg)';
                     cell.appendChild(pieceEl);
                 }
                 chessBoardEl.appendChild(cell);
             }
         }
         addBoardFeatures();
+        // 渲染后立即应用翻转效果
+        flipBoard(); 
         const sidePanel = document.querySelector('.side-panel');
         sidePanel.classList.toggle('red-turn', currentPlayer === 'red');
         sidePanel.classList.toggle('black-turn', currentPlayer === 'black');
@@ -362,6 +402,11 @@ document.addEventListener('DOMContentLoaded', () => {
         roleSwitchModal.classList.add('visible');
     }
 
+    function flipBoard() {
+        chessBoardEl.style.transform = isBoardFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
+        chessBoardEl.querySelectorAll('.chess-piece').forEach(p => p.style.transform = isBoardFlipped ? 'translate(-50%, -50%) rotate(180deg)' : 'translate(-50%, -50%) rotate(0deg)');
+    }
+
     switchToRedBtn.addEventListener('click', () => socket.emit('switchRole', { roomId, username: myUsername, desiredRole: 'red' }));
     switchToBlackBtn.addEventListener('click', () => socket.emit('switchRole', { roomId, username: myUsername, desiredRole: 'black' }));
     switchToSpectatorBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
@@ -373,8 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     restartBtn.addEventListener('click', () => socket.emit('requestRestart', { roomId }));
     flipBoardBtn.addEventListener('click', () => {
         isBoardFlipped = !isBoardFlipped;
-        chessBoardEl.style.transform = isBoardFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
-        chessBoardEl.querySelectorAll('.chess-piece').forEach(p => p.style.transform = isBoardFlipped ? 'translate(-50%, -50%) rotate(180deg)' : 'translate(-50%, -50%) rotate(0deg)');
+        flipBoard();
     });
 
     let selectedPiece = null;
@@ -382,12 +426,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (myRole !== 'player') return;
         const target = e.target.closest('.board-cell');
         if (!target) return;
-        const row = parseInt(target.dataset.row), col = parseInt(target.dataset.col);
+
+        // 坐标转换
+        let row = parseInt(target.dataset.row);
+        let col = parseInt(target.dataset.col);
+
+        if (isBoardFlipped) {
+            row = 9 - row;
+            col = 8 - col;
+        }
+
         const pieceData = currentRoomState.gameState.board[row][col];
         if (pieceData && pieceData.color === myColor) {
             selectedPiece = { row, col };
             clearHighlights();
-            target.querySelector('.chess-piece').classList.add('selected');
+            // 在原始（未翻转）的 DOM 元素上添加 'selected'
+            const originalTarget = document.querySelector(`.board-cell[data-row='${target.dataset.row}'][data-col='${target.dataset.col}']`);
+            originalTarget.querySelector('.chess-piece').classList.add('selected');
+
         } else if (selectedPiece) {
             socket.emit('playerMove', { roomId, from: selectedPiece, to: { row, col } });
             selectedPiece = null;
