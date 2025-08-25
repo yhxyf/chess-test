@@ -97,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayersList(room.players);
         updateSpectatorsList(room.spectators);
         updateMoveHistory(room.gameState.moveHistory);
+        updateButtonStates(room.gameState); // 更新按钮状态
 
         // 如果我是观战者且有空位，显示角色选择弹窗
         if (myRole === 'spectator' && room.players.filter(p => p.id).length < 2) {
@@ -116,9 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoard(gameState.board, gameState.currentPlayer);
         updateCapturedPieces(gameState.capturedPieces);
         updateMoveHistory(gameState.moveHistory);
+        updateButtonStates(gameState); // 更新按钮状态
     });
     
-    // 其他 socket.on 事件监听...
     socket.on('chatHistory', (messages) => {
         chatMessagesEl.innerHTML = '';
         messages.reverse().forEach(msg => addMessageToBox(msg.username, msg.message, 'user'));
@@ -161,7 +162,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let message = `游戏结束！${winner || '无人'} 获胜！`;
         if (reason) message += ` (${reason})`;
         alert(message);
-        if (myRole === 'player') restartBtn.style.display = 'inline-block';
     });
     
     socket.on('undoRequest', ({ from }) => {
@@ -184,6 +184,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function updateButtonStates(gameState) {
+        if (myRole !== 'player') {
+            undoBtn.disabled = true;
+            restartBtn.disabled = true;
+            return;
+        }
+
+        const isMyTurn = myColor === gameState.currentPlayer;
+        
+        // 只有当不是你的回合，并且棋局有历史记录（即不是第一步）时，才能请求悔棋
+        const canUndo = !isMyTurn && gameState.history && gameState.history.length > 0;
+        undoBtn.disabled = !canUndo;
+        
+        // 玩家总是可以请求重新开始
+        restartBtn.disabled = false;
+    }
 
     function updateRoomInfo(room, role) {
         roomInfoEl.innerHTML = `
@@ -192,8 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <p>您的身份: ${role === 'player' ? `玩家 (${myColor === 'red' ? '红方' : '黑方'})` : '观战者'} (${myUsername})</p>
         `;
     }
-
-    // ... renderBoard, getPieceSymbol, 等其他函数保持不变 ...
+    
     function renderBoard(board, currentPlayer) {
         chessBoardEl.innerHTML = '';
         const isMyTurn = myColor === currentPlayer && myRole === 'player';
@@ -225,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addBoardFeatures() {
-        // ... (内容不变)
         const palaceTop = document.createElement('div');
         palaceTop.className = 'palace palace-top';
         chessBoardEl.appendChild(palaceTop);
@@ -243,7 +257,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function getPieceSymbol(piece) {
-        // ... (内容不变)
         if (!piece) return '';
         const symbols = { 'general': '将', 'advisor': '士', 'elephant': '象', 'horse': '馬', 'chariot': '車', 'cannon': '炮', 'soldier': '卒' };
         const redSymbols = { 'general': '帅', 'advisor': '仕', 'elephant': '相', 'horse': '馬', 'chariot': '車', 'cannon': '炮', 'soldier': '兵' };
@@ -251,7 +264,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updatePlayersList(players) {
-        // ... (内容不变)
         playersListEl.innerHTML = '';
         const blackPlayer = players.find(p => p.color === 'black');
         const redPlayer = players.find(p => p.color === 'red');
@@ -269,7 +281,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateMoveHistory(history) {
-        // ... (内容不变)
         if (!history) return;
         moveHistoryEl.innerHTML = '';
         history.forEach((move, index) => {
@@ -291,8 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         moveHistoryEl.scrollTop = moveHistoryEl.scrollHeight;
     }
-    
-    // ... 其他辅助函数 ...
+
     function updateSpectatorsList(spectators) {
         spectatorsListEl.innerHTML = '';
         spectatorCountEl.textContent = spectators.length;
@@ -345,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
     }
     
-    // 角色选择弹窗逻辑
     function updateAndShowRoleModal(players) {
         const existingColors = players.filter(p=>p.id).map(p => p.color);
         switchToRedBtn.disabled = existingColors.includes('red');
@@ -358,8 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
     switchToSpectatorBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
     closeModalBtn.addEventListener('click', () => roleSwitchModal.classList.remove('visible'));
 
-
-    // --- 事件绑定 ---
     sendMessageBtnEl.addEventListener('click', sendMessage);
     messageInputEl.addEventListener('keypress', (e) => e.key === 'Enter' && sendMessage());
     undoBtn.addEventListener('click', () => socket.emit('requestUndo', { roomId }));

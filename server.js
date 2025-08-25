@@ -170,7 +170,7 @@ io.on('connection', (socket) => {
         if (!roomRecord) {
             DatabaseManager.createRoom(roomId, roomName);
             room = { id: roomId, name: roomName, players: [], spectators: [], status: 'waiting', gameState: initializeGameState() };
-            DatabaseManager.saveGameState(roomId, room.gameState.board, 'red');
+            DatabaseManager.saveGameState(roomId, room.gameState.board, 'red', JSON.stringify([]));
         } else {
             const dbPlayers = DatabaseManager.getPlayers(roomId).map(p => ({ id: null, username: p.username, color: p.color }));
             const dbGameState = DatabaseManager.getGameState(roomId);
@@ -221,7 +221,6 @@ io.on('connection', (socket) => {
     broadcastRooms();
   });
   
-  // *** FIXED LOGIC FOR SWITCHING ROLES ***
   socket.on('switchRole', ({ roomId, username, desiredRole }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -257,6 +256,7 @@ io.on('connection', (socket) => {
               room.status = 'playing';
               room.gameState = initializeGameState();
               DatabaseManager.updateRoomStatus(roomId, 'playing');
+              DatabaseManager.saveGameState(roomId, room.gameState.board, room.gameState.currentPlayer, JSON.stringify(room.gameState.moveHistory));
               io.to(roomId).emit('roomStatusUpdate', { status: 'playing' });
               io.to(roomId).emit('gameStateUpdate', room.gameState);
               io.to(roomId).emit('systemMessage', { message: '双方玩家已到齐，游戏开始！' });
@@ -276,7 +276,11 @@ io.on('connection', (socket) => {
 
     if (!isValidMove(from.row, from.col, to.row, to.col, player.color, room.gameState.board)) return;
 
-    room.gameState.history.push(JSON.parse(JSON.stringify(room.gameState)));
+    // *** FIX: Correctly save the state for undo ***
+    // Create a snapshot of the current state *before* the move.
+    // Exclude the 'history' array itself to prevent a recursive, infinitely growing object.
+    const { history, ...stateToSave } = room.gameState;
+    room.gameState.history.push(JSON.parse(JSON.stringify(stateToSave)));
     
     const moveNotation = getChinaChessNotation(pieceToMove, from, to, room.gameState.board);
     room.gameState.moveHistory.push(moveNotation);
@@ -318,19 +322,45 @@ io.on('connection', (socket) => {
       const room = rooms[roomId];
       if (!room || room.status !== 'playing') return;
       const player = room.players.find(p => p.id === socket.id);
-      if (!player || player.color === room.gameState.currentPlayer) return;
+      // The player requesting undo is the one who just moved, so it's now the opponent's turn.
+      // This check is correct: if it's your turn, you can't request undo.
+      if (!player || player.color === room.gameState.currentPlayer || room.gameState.history.length === 0) return;
+      
       const opponent = room.players.find(p => p.id && p.id !== socket.id);
-      if (opponent) io.to(opponent.id).emit('undoRequest', { from: player.username });
+      if (opponent) {
+        io.to(opponent.id).emit('undoRequest', { from: player.username });
+        // *** FIX: Add feedback to the requester ***
+        io.to(player.id).emit('systemMessage', { message: '悔棋请求已发送，等待对方同意...' });
+      }
   });
 
   socket.on('undoResponse', ({ roomId, accepted }) => {
       const room = rooms[roomId];
       if (!room || !room.gameState.history || room.gameState.history.length === 0) return;
-      const player = room.players.find(p => p.id === socket.id);
+      
+      const acceptingPlayer = room.players.find(p => p.id === socket.id);
+      const requestingPlayer = room.players.find(p => p.id && p.color !== acceptingPlayer.color);
+
       if (accepted) {
-          room.gameState = room.gameState.history.pop();
-          DatabaseManager.saveGameState(roomId, room.gameState.board, room.gameState.currentPlayer, JSON.stringify(room.gameState.moveHistory));
-          io.to(roomId).emit('gameStateUpdate', room.gameState);
+          // *** FIX: Correctly restore the previous game state ***
+          const lastState = room.gameState.history.pop();
+          if (lastState) {
+              // Restore all the properties from the saved state
+              room.gameState.board = lastState.board;
+              room.gameState.currentPlayer = lastState.currentPlayer;
+              room.gameState.capturedPieces = lastState.capturedPieces;
+              room.gameState.moveHistory = lastState.moveHistory;
+              room.gameState.isCheck = lastState.isCheck;
+
+              DatabaseManager.saveGameState(roomId, room.gameState.board, room.gameState.currentPlayer, JSON.stringify(room.gameState.moveHistory));
+              io.to(roomId).emit('gameStateUpdate', room.gameState);
+              io.to(roomId).emit('systemMessage', { message: `${acceptingPlayer.username} 同意了悔棋请求。` });
+          }
+      } else {
+        // *** FIX: Add feedback for rejection ***
+        if (requestingPlayer) {
+           io.to(requestingPlayer.id).emit('systemMessage', { message: `${acceptingPlayer.username} 拒绝了你的悔棋请求。` });
+        }
       }
   });
 
@@ -340,18 +370,32 @@ io.on('connection', (socket) => {
       const player = room.players.find(p => p.id === socket.id);
       if (!player) return;
       const opponent = room.players.find(p => p.id && p.id !== socket.id);
-      if (opponent) io.to(opponent.id).emit('restartRequest', { from: player.username });
+      if (opponent) {
+        io.to(opponent.id).emit('restartRequest', { from: player.username });
+        // *** FIX: Add feedback to the requester ***
+        io.to(player.id).emit('systemMessage', { message: '重新开始请求已发送，等待对方同意...' });
+      }
   });
 
   socket.on('restartResponse', ({ roomId, accepted }) => {
       const room = rooms[roomId];
       if (!room) return;
+      const acceptingPlayer = room.players.find(p => p.id === socket.id);
+
       if (accepted) {
           room.status = 'playing';
           room.gameState = initializeGameState();
           DatabaseManager.updateRoomStatus(roomId, 'playing');
+          // *** FIX: Save the new game state to the database ***
+          DatabaseManager.saveGameState(roomId, room.gameState.board, room.gameState.currentPlayer, JSON.stringify(room.gameState.moveHistory));
           io.to(roomId).emit('gameStateUpdate', room.gameState);
-          io.to(roomId).emit('systemMessage', { message: '游戏已重新开始！' });
+          io.to(roomId).emit('systemMessage', { message: '双方同意，游戏已重新开始！' });
+      } else {
+        // *** FIX: Add feedback for rejection ***
+        const requestingPlayer = room.players.find(p => p.id && p.id !== socket.id);
+        if (requestingPlayer) {
+             io.to(requestingPlayer.id).emit('systemMessage', { message: `${acceptingPlayer.username} 拒绝了重新开始的请求。` });
+        }
       }
   });
 
@@ -388,7 +432,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3008;
 server.listen(PORT, () => {
   console.log(`服务器运行在端口 http://localhost:${PORT}`);
 });

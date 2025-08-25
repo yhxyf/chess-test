@@ -120,10 +120,10 @@ class DatabaseManager {
   }
 
   // 保存游戏状态
-  static saveGameState(roomId, board, currentPlayer) {
+  static saveGameState(roomId, board, currentPlayer, history) {
     try {
-      db.prepare('INSERT OR REPLACE INTO game_states (room_id, board, current_player, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(
-        roomId, JSON.stringify(board), currentPlayer
+      db.prepare('INSERT OR REPLACE INTO game_states (room_id, board, current_player, history, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)').run(
+        roomId, JSON.stringify(board), currentPlayer, history
       );
       return true;
     } catch (error) {
